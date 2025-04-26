@@ -7,40 +7,58 @@ function App() {
   const [endTime, setEndTime] = useState('00:00:00')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [clipPath, setClipPath] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setClipPath('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/clip', {
+      const downloadResponse = await fetch('http://localhost:3000/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!downloadResponse.ok) {
+        const errorData = await downloadResponse.json();
+        throw new Error(errorData.error || 'Failed to download video');
+      }
+
+      const downloadData = await downloadResponse.json();
+      const downloadedFilePath = downloadData.filePath;
+
+      if (!downloadedFilePath) {
+        throw new Error('Download succeeded but did not return a file path.');
+      }
+
+      const clipResponse = await fetch('http://localhost:3000/api/clip', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url,
+          filePath: downloadedFilePath,
           startTime,
           endTime,
         }),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to process video')
+      if (!clipResponse.ok) {
+        const errorData = await clipResponse.json();
+        throw new Error(errorData.error || 'Failed to clip video');
       }
 
-      // Create a blob from the response and download it
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = 'video-clip.mp4'
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(downloadUrl)
-      document.body.removeChild(a)
+      const clipData = await clipResponse.json();
+      console.log('Clip successful:', clipData);
+      setClipPath(clipData.filePath);
+
     } catch (err) {
+      console.error('Error in handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
@@ -102,7 +120,12 @@ function App() {
           {loading ? 'Processing...' : 'Clip Video'}
         </button>
         {error && (
-          <div className="text-red-500 text-sm">{error}</div>
+          <div className="text-red-500 text-sm mt-2">{error}</div>
+        )}
+        {clipPath && (
+          <div className="text-green-500 text-sm mt-2">
+            Clip created successfully! Server path: {clipPath}
+          </div>
         )}
       </form>
     </div>
