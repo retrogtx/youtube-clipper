@@ -16,33 +16,13 @@ function App() {
     setClipPath('');
 
     try {
-      const downloadResponse = await fetch('http://localhost:3000/api/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      });
-
-      if (!downloadResponse.ok) {
-        const errorData = await downloadResponse.json();
-        throw new Error(errorData.error || 'Failed to download video');
-      }
-
-      const downloadData = await downloadResponse.json();
-      const downloadedFilePath = downloadData.filePath;
-
-      if (!downloadedFilePath) {
-        throw new Error('Download succeeded but did not return a file path.');
-      }
-
       const clipResponse = await fetch('http://localhost:3000/api/clip', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          filePath: downloadedFilePath,
+          url,
           startTime,
           endTime,
         }),
@@ -50,7 +30,7 @@ function App() {
 
       if (!clipResponse.ok) {
         const errorData = await clipResponse.json();
-        throw new Error(errorData.error || 'Failed to clip video');
+        throw new Error(errorData.details || errorData.error || 'Failed to process video section');
       }
 
       const clipData = await clipResponse.json();
