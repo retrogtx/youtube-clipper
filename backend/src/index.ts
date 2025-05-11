@@ -68,7 +68,7 @@ app.post("/api/clip", async (req, res) => {
         const ytDlp = spawn("yt-dlp", [
           url,
           "-f",
-          "bestvideo+bestaudio/best",
+          "bestvideo[protocol=https][ext=mp4]+bestaudio[protocol=https][ext=m4a]/bestvideo[protocol=https][ext=webm]+bestaudio[protocol=https][ext=webm]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=webm]+bestaudio[ext=webm]/best",
           "--download-sections",
           section,
           "-o",
