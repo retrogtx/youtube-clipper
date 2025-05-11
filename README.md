@@ -6,7 +6,7 @@ A SaaS tool that allows users to extract specific clips from YouTube videos by p
 
 ## Features
 
-- **Frontend:** React + Vite + TailwindCSS (with Shadcn/UI)
+- **Frontend:** NextJS + TailwindCSS (with Shadcn/UI)
 - **Backend:** Node.js (Express) with Bun runtime
 - **Video Processing:** Uses `yt-dlp` and `ffmpeg` for efficient, compatible video clipping
 - **No cloud storage required:** Clips are downloaded directly to your device
@@ -24,6 +24,7 @@ You must have the following installed on your system:
 - **[ffmpeg](https://ffmpeg.org/):** Command-line tool for video processing
 
 ### To check if you have these installed, run:
+
 ```sh
 bun --version
 node --version
@@ -73,7 +74,8 @@ bun install
 cd backend
 bun run src/index.ts
 ```
-- The backend will start on `http://localhost:3000` by default.
+
+- The backend will start on `http://localhost:3001` by default.
 
 #### Start the frontend
 
@@ -81,13 +83,14 @@ bun run src/index.ts
 cd ../frontend
 bun run dev
 ```
-- The frontend will start on `http://localhost:5173` by default.
+
+- The frontend will start on `http://localhost:3000` by default.
 
 ---
 
 ## Usage
 
-1. Open the frontend in your browser (`http://localhost:5173`).
+1. Open the frontend in your browser (`http://localhost:3000`).
 2. Enter a YouTube URL and the desired start/end timestamps (format: `HH:MM:SS`).
 3. Click "Clip Video".
 4. The processed clip will be downloaded directly to your computer as `clip.mp4`.
@@ -113,11 +116,12 @@ youtube-clipper/
     package.json
     tsconfig.json
   frontend/
-    src/
+    app/
     public/
+    components/
     package.json
     tsconfig.json
-    vite.config.ts
+    next.config.ts
 ```
 
 ---
@@ -138,7 +142,6 @@ youtube-clipper/
 - TypeScript is used throughout.
 - Hot reload is NOT enabled.
 - Linting is available via `bun run lint` in the frontend.
-
 
 ---
 
