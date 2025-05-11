@@ -147,10 +147,16 @@ app.post('/api/clip', async (req, res) => {
     // But for frame-accurate trimming, use FFmpeg as before:
     console.log(`Clipping muxed file (${tempMuxedPath}) from ${startTime} to ${endTime} into ${finalOutputPath}`);
 
+    // Re-encode for Twitter compatibility
     const ffmpeg = spawn('ffmpeg', [
       '-i', tempMuxedPath,
-      '-c:v', 'copy',
-      '-c:a', 'copy',
+      '-c:v', 'libx264',
+      '-profile:v', 'high',
+      '-level', '4.0',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
       '-y',
       finalOutputPath
     ]);
@@ -184,12 +190,30 @@ app.post('/api/clip', async (req, res) => {
 
     console.log(`Processing complete. Final clip available at: ${finalOutputPath}`);
 
-    // Send the path of the final clipped video back to the client
-    res.json({ 
-      success: true, 
-      filePath: finalOutputPath, 
-      message: 'Video section processed successfully' 
+    // Send the final clipped video file as a download
+    res.download(finalOutputPath, 'clip.mp4', async (err) => {
+      if (err) {
+        console.error('Error sending file:', err);
+        // Don't send another response, just log
+      }
+      // Cleanup after sending
+      try {
+        if (fs.existsSync(finalOutputPath)) {
+          await unlinkAsync(finalOutputPath);
+        }
+        if (tempMuxedPath && fs.existsSync(tempMuxedPath)) {
+          await unlinkAsync(tempMuxedPath);
+        }
+        const partFilePath = finalOutputPath + '.part';
+        if (fs.existsSync(partFilePath)) {
+          await unlinkAsync(partFilePath);
+        }
+        console.log('Temporary file cleanup finished.');
+      } catch (cleanupErr) {
+        console.error('Cleanup error:', cleanupErr);
+      }
     });
+    return;
 
   } catch (error) { // Catch block needs variable name 'error'
     console.error('Error processing video section:', error);
@@ -197,20 +221,6 @@ app.post('/api/clip', async (req, res) => {
       error: 'Failed to process video section',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
-  } finally {
-    // --- Cleanup Temporary Full Files ---
-    const cleanupPromises: Promise<void>[] = [];
-    if (tempMuxedPath && fs.existsSync(tempMuxedPath)) {
-      console.log(`Cleaning up temporary muxed file: ${tempMuxedPath}`);
-      cleanupPromises.push(unlinkAsync(tempMuxedPath).catch(err => console.error(`Failed to delete temp muxed: ${err}`)));
-    }
-    const partFilePath = finalOutputPath + '.part';
-    if (fs.existsSync(partFilePath)) {
-      console.log(`Cleaning up partial ffmpeg output: ${partFilePath}`);
-      cleanupPromises.push(unlinkAsync(partFilePath).catch(err => console.error(`Failed to delete partial file: ${err}`)));
-    }
-    await Promise.all(cleanupPromises);
-    console.log('Temporary file cleanup finished.');
   }
 });
 

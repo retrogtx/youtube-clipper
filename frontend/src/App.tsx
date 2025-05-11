@@ -13,7 +13,6 @@ function App() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setClipPath('');
 
     try {
       const clipResponse = await fetch('http://localhost:3000/api/clip', {
@@ -26,16 +25,32 @@ function App() {
           startTime,
           endTime,
         }),
-      })
+      });
 
       if (!clipResponse.ok) {
-        const errorData = await clipResponse.json();
-        throw new Error(errorData.details || errorData.error || 'Failed to process video section');
+        // Try to parse error JSON, fallback to text
+        let errorMsg = 'Failed to process video section';
+        try {
+          const errorData = await clipResponse.json();
+          errorMsg = errorData.details || errorData.error || errorMsg;
+        } catch {
+          errorMsg = await clipResponse.text();
+        }
+        throw new Error(errorMsg);
       }
 
-      const clipData = await clipResponse.json();
-      console.log('Clip successful:', clipData);
-      setClipPath(clipData.filePath);
+      // Get the blob and trigger download
+      const blob = await clipResponse.blob();
+      const urlObj = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = urlObj;
+      a.download = 'clip.mp4';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(urlObj);
+      // Optionally, show a success message
+      // setSuccess('Clip downloaded!');
 
     } catch (err) {
       console.error('Error in handleSubmit:', err);
