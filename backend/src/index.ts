@@ -1,21 +1,21 @@
-import express from 'express';
-import cors from 'cors';
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { promisify } from 'util'; // For fs.unlink
+import express from "express";
+import cors from "cors";
+import { spawn } from "child_process";
+import path from "path";
+import fs from "fs";
+import { promisify } from "util"; // For fs.unlink
 
 const unlinkAsync = promisify(fs.unlink); // Promisify fs.unlink for async cleanup
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
+const uploadsDir = path.join(__dirname, "../uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
@@ -24,7 +24,7 @@ if (!fs.existsSync(uploadsDir)) {
 // app.post('/api/download', async (req, res) => { ... });
 
 // Combined video download and clipping endpoint
-app.post('/api/clip', async (req, res) => {
+app.post("/api/clip", async (req, res) => {
   const timestamp = Date.now();
   // Temporary base name for downloaded stream
   const tempMuxedPathBase = path.join(uploadsDir, `temp-muxed-${timestamp}`);
@@ -38,51 +38,67 @@ app.post('/api/clip', async (req, res) => {
 
     // Validate inputs
     if (!url || !startTime || !endTime) {
-      return res.status(400).json({ 
-        error: 'url, startTime, and endTime are required' 
+      return res.status(400).json({
+        error: "url, startTime, and endTime are required",
       });
     }
     // TODO: Add more robust validation for startTime and endTime formats (e.g., HH:MM:SS.ms)
 
-    console.log(`Attempting to download muxed video/audio for clipping from ${url}`);
+    console.log(
+      `Attempting to download muxed video/audio for clipping from ${url}`
+    );
     console.log(`Using temporary muxed base: ${tempMuxedPathBase}`);
 
     // --- Step 1: Download muxed video+audio with yt-dlp (only the desired segment) ---
-    const runYtDlpDownload = (outputPathBase: string, startTime: string, endTime: string): Promise<string> => {
+    const runYtDlpDownload = (
+      outputPathBase: string,
+      startTime: string,
+      endTime: string
+    ): Promise<string> => {
       return new Promise<string>((resolve, reject) => {
-        const outputPathTemplate = outputPathBase + '.%(ext)s';
+        const outputPathTemplate = outputPathBase + ".%(ext)s";
         let detectedPath: string | null = null;
-        console.log(`Starting yt-dlp partial download for muxed format to template '${outputPathTemplate}'`);
+        console.log(
+          `Starting yt-dlp partial download for muxed format to template '${outputPathTemplate}'`
+        );
 
         // Format the download section string for yt-dlp
         const section = `*${startTime}-${endTime}`;
 
-        const ytDlp = spawn('yt-dlp', [
+        const ytDlp = spawn("yt-dlp", [
           url,
-          '-f', 'bestvideo+bestaudio/best',
-          '--download-sections', section,
-          '-o', outputPathTemplate,
-          '--no-check-certificates',
-          '--no-warnings',
-          '--add-header', 'referer:youtube.com',
-          '--add-header', 'user-agent:Mozilla/5.0',
-          '--merge-output-format', 'mp4',
-          '--verbose',
+          "-f",
+          "bestvideo+bestaudio/best",
+          "--download-sections",
+          section,
+          "-o",
+          outputPathTemplate,
+          "--no-check-certificates",
+          "--no-warnings",
+          "--add-header",
+          "referer:youtube.com",
+          "--add-header",
+          "user-agent:Mozilla/5.0",
+          "--merge-output-format",
+          "mp4",
+          "--verbose",
         ]);
 
-        let processStderr = '';
-        ytDlp.stderr.on('data', (data) => {
+        let processStderr = "";
+        ytDlp.stderr.on("data", (data) => {
           console.error(`yt-dlp stderr (muxed): ${data}`);
           processStderr += data.toString();
         });
 
-        let processStdout = '';
-        ytDlp.stdout.on('data', (data) => {
+        let processStdout = "";
+        ytDlp.stdout.on("data", (data) => {
           const output = data.toString();
           console.log(`yt-dlp stdout (muxed): ${output}`);
           processStdout += output;
           // Look for destination message
-          const destinationMatch = output.match(/\[download\] Destination: (.+)/);
+          const destinationMatch = output.match(
+            /\[download\] Destination: (.+)/
+          );
           if (destinationMatch && destinationMatch[1]) {
             const filePath = destinationMatch[1].trim();
             if (filePath.startsWith(outputPathBase)) {
@@ -92,38 +108,61 @@ app.post('/api/clip', async (req, res) => {
           }
         });
 
-        ytDlp.on('close', (code) => {
+        ytDlp.on("close", (code) => {
           if (code === 0) {
             if (detectedPath && fs.existsSync(detectedPath)) {
-              console.log(`yt-dlp download successful (muxed): ${detectedPath}`);
+              console.log(
+                `yt-dlp download successful (muxed): ${detectedPath}`
+              );
               resolve(detectedPath);
               return;
             }
             // If not detected, try finding file matching the base name
-            console.log(`Could not determine output file from stdout (muxed), attempting to find files...`);
+            console.log(
+              `Could not determine output file from stdout (muxed), attempting to find files...`
+            );
             try {
               const files = fs.readdirSync(uploadsDir);
-              const foundFile = files.find(f => f.startsWith(path.basename(outputPathBase)));
+              const foundFile = files.find((f) =>
+                f.startsWith(path.basename(outputPathBase))
+              );
               if (foundFile) {
                 const fullPath = path.join(uploadsDir, foundFile);
                 if (fs.existsSync(fullPath)) {
-                  console.log(`Found downloaded file (muxed) by searching: ${fullPath}`);
+                  console.log(
+                    `Found downloaded file (muxed) by searching: ${fullPath}`
+                  );
                   resolve(fullPath);
                   return;
                 }
               }
             } catch (findErr) {
-              console.error(`Error searching for downloaded file (muxed):`, findErr);
+              console.error(
+                `Error searching for downloaded file (muxed):`,
+                findErr
+              );
             }
-            console.error(`yt-dlp process (muxed) exited code 0 but no output file found.`);
-            reject(new Error(`yt-dlp (muxed) indicated success, but no output file was found. Stderr: ${processStderr}`));
+            console.error(
+              `yt-dlp process (muxed) exited code 0 but no output file found.`
+            );
+            reject(
+              new Error(
+                `yt-dlp (muxed) indicated success, but no output file was found. Stderr: ${processStderr}`
+              )
+            );
           } else {
-            console.error(`yt-dlp process (muxed) exited with code ${code}. Stderr: ${processStderr}`);
-            reject(new Error(`yt-dlp download (muxed) failed with code ${code}. Stderr: ${processStderr}`));
+            console.error(
+              `yt-dlp process (muxed) exited with code ${code}. Stderr: ${processStderr}`
+            );
+            reject(
+              new Error(
+                `yt-dlp download (muxed) failed with code ${code}. Stderr: ${processStderr}`
+              )
+            );
           }
         });
 
-        ytDlp.on('error', (err) => {
+        ytDlp.on("error", (err) => {
           console.error(`Failed to start yt-dlp process (muxed):`, err);
           reject(new Error(`Failed to start yt-dlp (muxed): ${err.message}`));
         });
@@ -132,68 +171,99 @@ app.post('/api/clip', async (req, res) => {
 
     // Download muxed file (only the segment)
     try {
-      tempMuxedPath = await runYtDlpDownload(tempMuxedPathBase, startTime, endTime);
+      tempMuxedPath = await runYtDlpDownload(
+        tempMuxedPathBase,
+        startTime,
+        endTime
+      );
     } catch (downloadError) {
-      console.error('yt-dlp muxed download failed.', downloadError);
+      console.error("yt-dlp muxed download failed.", downloadError);
       throw downloadError;
     }
 
     // --- Step 2: Optionally, do a final trim with FFmpeg for frame accuracy ---
     if (!tempMuxedPath) {
-      throw new Error('Missing temporary muxed path after download.');
+      throw new Error("Missing temporary muxed path after download.");
     }
 
     // If you want to skip FFmpeg and just return the yt-dlp output, you can do so here.
     // But for frame-accurate trimming, use FFmpeg as before:
-    console.log(`Clipping muxed file (${tempMuxedPath}) from ${startTime} to ${endTime} into ${finalOutputPath}`);
+    console.log(
+      `Clipping muxed file (${tempMuxedPath}) from ${startTime} to ${endTime} into ${finalOutputPath}`
+    );
 
     // Re-encode for Twitter compatibility
-    const ffmpeg = spawn('ffmpeg', [
-      '-i', tempMuxedPath,
-      '-c:v', 'libx264',
-      '-profile:v', 'high',
-      '-level', '4.0',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart',
-      '-y',
-      finalOutputPath
+    const ffmpeg = spawn("ffmpeg", [
+      "-i",
+      tempMuxedPath,
+      "-c:v",
+      "libx264",
+      "-profile:v",
+      "high",
+      "-level",
+      "4.0",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-movflags",
+      "+faststart",
+      "-y",
+      finalOutputPath,
     ]);
 
-    let ffmpegStderr = '';
-    ffmpeg.stderr.on('data', (data) => {
+    let ffmpegStderr = "";
+    ffmpeg.stderr.on("data", (data) => {
       console.log(`ffmpeg: ${data}`);
       ffmpegStderr += data.toString();
     });
 
     await new Promise<void>((resolve, reject) => {
-      ffmpeg.on('close', (code) => {
+      ffmpeg.on("close", (code) => {
         if (code === 0) {
-          if (fs.existsSync(finalOutputPath) && fs.statSync(finalOutputPath).size > 0) {
-            console.log('FFmpeg remux successful.');
+          if (
+            fs.existsSync(finalOutputPath) &&
+            fs.statSync(finalOutputPath).size > 0
+          ) {
+            console.log("FFmpeg remux successful.");
             resolve();
           } else {
-            console.error(`FFmpeg exited code 0 but output file missing or empty: ${finalOutputPath}`);
-            reject(new Error(`FFmpeg remux failed: Output file missing or empty. Stderr: ${ffmpegStderr}`));
+            console.error(
+              `FFmpeg exited code 0 but output file missing or empty: ${finalOutputPath}`
+            );
+            reject(
+              new Error(
+                `FFmpeg remux failed: Output file missing or empty. Stderr: ${ffmpegStderr}`
+              )
+            );
           }
         } else {
-          console.error(`FFmpeg process exited with code ${code}. Stderr: ${ffmpegStderr}`);
-          reject(new Error(`FFmpeg remux failed with code ${code}. Stderr: ${ffmpegStderr}`));
+          console.error(
+            `FFmpeg process exited with code ${code}. Stderr: ${ffmpegStderr}`
+          );
+          reject(
+            new Error(
+              `FFmpeg remux failed with code ${code}. Stderr: ${ffmpegStderr}`
+            )
+          );
         }
       });
-      ffmpeg.on('error', (err) => {
-        console.error('Failed to start ffmpeg process:', err);
+      ffmpeg.on("error", (err) => {
+        console.error("Failed to start ffmpeg process:", err);
         reject(new Error(`Failed to start ffmpeg: ${err.message}`));
       });
     });
 
-    console.log(`Processing complete. Final clip available at: ${finalOutputPath}`);
+    console.log(
+      `Processing complete. Final clip available at: ${finalOutputPath}`
+    );
 
     // Send the final clipped video file as a download
-    res.download(finalOutputPath, 'clip.mp4', async (err) => {
+    res.download(finalOutputPath, "clip.mp4", async (err) => {
       if (err) {
-        console.error('Error sending file:', err);
+        console.error("Error sending file:", err);
         // Don't send another response, just log
       }
       // Cleanup after sending
@@ -204,22 +274,22 @@ app.post('/api/clip', async (req, res) => {
         if (tempMuxedPath && fs.existsSync(tempMuxedPath)) {
           await unlinkAsync(tempMuxedPath);
         }
-        const partFilePath = finalOutputPath + '.part';
+        const partFilePath = finalOutputPath + ".part";
         if (fs.existsSync(partFilePath)) {
           await unlinkAsync(partFilePath);
         }
-        console.log('Temporary file cleanup finished.');
+        console.log("Temporary file cleanup finished.");
       } catch (cleanupErr) {
-        console.error('Cleanup error:', cleanupErr);
+        console.error("Cleanup error:", cleanupErr);
       }
     });
     return;
-
-  } catch (error) { // Catch block needs variable name 'error'
-    console.error('Error processing video section:', error);
-    res.status(500).json({ 
-      error: 'Failed to process video section',
-      details: error instanceof Error ? error.message : 'Unknown error'
+  } catch (error) {
+    // Catch block needs variable name 'error'
+    console.error("Error processing video section:", error);
+    res.status(500).json({
+      error: "Failed to process video section",
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
