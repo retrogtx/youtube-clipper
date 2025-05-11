@@ -1,16 +1,29 @@
 "use client";
-import { useState } from "react";
+import { authClient } from "@/lib/auth-client" // import the auth client
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function App() {
+  const router = useRouter(); // initialize router
   const [url, setUrl] = useState("");
   const [startTime, setStartTime] = useState("00:00:00");
   const [endTime, setEndTime] = useState("00:00:00");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [clipPath, setClipPath] = useState("");
+
+  const { 
+    data: session, 
+} = authClient.useSession();
+
+  useEffect(() => {
+    if (!session) {
+      router.push("/login"); 
+    }
+  }, [session, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
