@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { YouTubePlayer } from "@/components/youtube-player";
 
 export default function App() {
   const [url, setUrl] = useState("");
@@ -11,6 +12,65 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [clipPath, setClipPath] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [videoTitle, setVideoTitle] = useState("");
+
+  // Extract video ID from YouTube URL
+  const getVideoId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return match && match[2].length === 11 ? match[2] : null;
+  };
+
+  // Format time input to ensure HH:MM:SS format
+  const formatTimeInput = (time: string) => {
+    // If empty, return default
+    if (!time) return "00:00:00";
+    
+    // Remove any non-digit characters
+    const digits = time.replace(/\D/g, '');
+    
+    // If no digits, return default
+    if (!digits) return "00:00:00";
+    
+    // Take only first 6 digits
+    const sixDigits = digits.slice(0, 6).padStart(6, '0');
+    
+    // Format as HH:MM:SS
+    return `${sixDigits.slice(0, 2)}:${sixDigits.slice(2, 4)}:${sixDigits.slice(4, 6)}`;
+  };
+
+  const handleTimeChange = (value: string, setter: (value: string) => void) => {
+    setter(value);
+  };
+
+  const handlePreview = () => {
+    setShowPreview(true);
+  };
+
+  // Fetch video title when URL changes
+  useEffect(() => {
+    const fetchVideoTitle = async () => {
+      const videoId = getVideoId(url);
+      if (!videoId) {
+        setVideoTitle("");
+        return;
+      }
+
+      try {
+        const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+        if (response.ok) {
+          const data = await response.json();
+          setVideoTitle(data.title);
+        }
+      } catch (error) {
+        console.error("Error fetching video title:", error);
+        setVideoTitle("");
+      }
+    };
+
+    fetchVideoTitle();
+  }, [url]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,8 +85,8 @@ export default function App() {
         },
         body: JSON.stringify({
           url,
-          startTime,
-          endTime,
+          startTime: formatTimeInput(startTime),
+          endTime: formatTimeInput(endTime),
         }),
       });
 
@@ -47,13 +107,18 @@ export default function App() {
       const urlObj = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = urlObj;
-      a.download = "clip.mp4";
+
+      // Create descriptive filename
+      const formattedStartTime = formatTimeInput(startTime).replace(/:/g, '-');
+      const formattedEndTime = formatTimeInput(endTime).replace(/:/g, '-');
+      const safeTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `${safeTitle}_${formattedStartTime}_to_${formattedEndTime}.mp4`;
+      
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(urlObj);
-      // Optionally, show a success message
-      // setSuccess('Clip downloaded!');
     } catch (err) {
       console.error("Error in handleSubmit:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -61,6 +126,8 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  const videoId = getVideoId(url);
 
   return (
     <main className="flex flex-col mx-auto max-w-lg w-full justify-center h-full items-center min-h-screen">
@@ -83,8 +150,7 @@ export default function App() {
               type="text"
               id="startTime"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+              onChange={(e) => handleTimeChange(e.target.value, setStartTime)}
               placeholder="00:00:00"
               required
             />
@@ -95,15 +161,30 @@ export default function App() {
               type="text"
               id="endTime"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+              onChange={(e) => handleTimeChange(e.target.value, setEndTime)}
               placeholder="00:00:00"
               required
             />
           </div>
-          <Button type="submit" disabled={loading} className="w-full" size="lg">
-            {loading ? "Processing..." : "Clip Video"}
-          </Button>
+          <div className="flex gap-4">
+            <Button 
+              type="button" 
+              onClick={handlePreview} 
+              className="flex-1" 
+              size="lg"
+              disabled={!videoId}
+            >
+              Preview Clip
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={loading} 
+              className="flex-1" 
+              size="lg"
+            >
+              {loading ? "Processing..." : "Download Clip"}
+            </Button>
+          </div>
           {error && (
             <div className="text-destructive text-sm mt-2">{error}</div>
           )}
@@ -113,6 +194,18 @@ export default function App() {
             </div>
           )}
         </form>
+
+        {/* Video Preview */}
+        {videoId && showPreview && (
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold mb-4">Preview</h2>
+            <YouTubePlayer
+              videoId={videoId}
+              startTime={formatTimeInput(startTime)}
+              endTime={formatTimeInput(endTime)}
+            />
+          </div>
+        )}
       </section>
     </main>
   );
