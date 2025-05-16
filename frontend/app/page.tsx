@@ -1,27 +1,29 @@
 "use client";
 import { authClient } from "@/lib/auth-client" // import the auth client
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; 
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 export default function App() {
   const router = useRouter(); // initialize router
   const [url, setUrl] = useState("");
   const [startTime, setStartTime] = useState("00:00:00");
   const [endTime, setEndTime] = useState("00:00:00");
+  const [isCropped, setIsCropped] = useState(false)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [clipPath, setClipPath] = useState("");
 
-  const { 
-    data: session, 
-} = authClient.useSession();
+  const {
+    data: session,
+  } = authClient.useSession();
 
   useEffect(() => {
     if (!session) {
-      router.push("/login"); 
+      router.push("/login");
     }
   }, [session, router]);
 
@@ -40,6 +42,7 @@ export default function App() {
           url,
           startTime,
           endTime,
+          isCropped
         }),
       });
 
@@ -85,6 +88,7 @@ export default function App() {
             <Input
               type="text"
               id="url"
+              placeholder="https://youtu.be/sSOxPJD-VNo?si=8eiKNlwqde-WfEzD"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               required
@@ -113,6 +117,14 @@ export default function App() {
               placeholder="00:00:00"
               required
             />
+          </div>
+          <div className="flex !items-center space-x-2 my-1">
+            <Switch
+              checked={isCropped}
+              onCheckedChange={() => setIsCropped(!isCropped)}
+              id="isCropped"
+            />
+            <Label htmlFor="isCropped">Reel format</Label>
           </div>
           <Button type="submit" disabled={loading} className="w-full" size="lg">
             {loading ? "Processing..." : "Clip Video"}
