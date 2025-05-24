@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import Buy from "@/components/buy";
 
 export default function App() {
   const router = useRouter(); // initialize router
@@ -82,6 +83,12 @@ export default function App() {
     <main className="flex flex-col mx-auto max-w-lg w-full justify-center h-full items-center min-h-screen">
       <section className="flex flex-col w-full gap-12 border-2 border-border/50 p-4 md:p-6 bg-muted/30 rounded-3xl">
         <h1 className="text-2xl font-bold tracking-tight">Video Clipper</h1>
+        <Buy product={{
+          product_id: process.env.NEXT_PUBLIC_DODO_PAYMENTS_PRODUCT_ID!,
+          name: "Basic Subscription",
+          description: "Access to all basic features",
+          price: 3,
+        }} />
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="space-y-2">
             <Label htmlFor="url">YouTube URL</Label>

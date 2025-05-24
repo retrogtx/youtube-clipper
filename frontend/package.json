@@ -16,6 +16,7 @@
     "better-auth": "^1.2.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dodopayments": "^1.25.0",
     "drizzle-orm": "^0.43.1",
     "lucide-react": "^0.509.0",
     "next": "15.3.2",
@@ -23,6 +24,7 @@
     "og": "^0.0.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "standardwebhooks": "^1.0.0",
     "tailwind-merge": "^3.2.0"
   },
   "devDependencies": {
