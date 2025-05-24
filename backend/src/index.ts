@@ -34,7 +34,7 @@ app.post("/api/clip", async (req, res) => {
   const finalOutputPath = path.join(uploadsDir, `clip-${timestamp}.mp4`);
 
   try {
-    const { url, startTime, endTime, isCropped } = req.body;
+    const { url, startTime, endTime, cropRatio } = req.body;
 
     // Validate inputs
     if (!url || !startTime || !endTime) {
@@ -195,21 +195,33 @@ app.post("/api/clip", async (req, res) => {
     // Re-encode for Twitter compatibility
     const ffmpegArgs = ["-i", tempMuxedPath];
 
-    if (isCropped) {
+    if (cropRatio === "vertical") {
       ffmpegArgs.push(
         "-vf",
         "crop='min(in_w,in_h*9/16)':'min(in_h,in_w*16/9)',scale=1080:1920"
       );
+    } else if (cropRatio === "square") {
+      ffmpegArgs.push(
+        "-vf",
+        "crop='min(in_w,in_h)':'min(in_h,in_w)',scale=1080:1080"
+      );
     }
 
     ffmpegArgs.push(
-      "-c:v", "libx264",
-      "-profile:v", "high",
-      "-level", "4.0",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-movflags", "+faststart",
+      "-c:v",
+      "libx264",
+      "-profile:v",
+      "high",
+      "-level",
+      "4.0",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-movflags",
+      "+faststart",
       "-y",
       finalOutputPath
     );
