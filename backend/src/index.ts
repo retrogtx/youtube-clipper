@@ -288,7 +288,7 @@ app.post("/api/clip", async (req, res) => {
         if (tempMuxedPath && fs.existsSync(tempMuxedPath)) {
           await unlinkAsync(tempMuxedPath);
         }
-        const partFilePath = finalOutputPath + ".part";
+        const partFilePath = finalOutputPath + ".part"; // ffmpeg might leave a .part file if interrupted
         if (fs.existsSync(partFilePath)) {
           await unlinkAsync(partFilePath);
         }
@@ -297,13 +297,30 @@ app.post("/api/clip", async (req, res) => {
         console.error("Cleanup error:", cleanupErr);
       }
     });
-    return;
   } catch (error) {
-    // Catch block needs variable name 'error'
-    console.error("Error processing video section:", error);
+    console.error("Error during video processing:", error);
+    // Ensure a JSON response is always sent
+    // Also, provide more details if error has a message or details property
+    let errorMessage = "Failed to process video.";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
+    let errorDetails = "No additional details.";
+    if (typeof error === 'object' && error !== null) {
+      if ('details' in error && typeof error.details === 'string') {
+        errorDetails = error.details;
+      } else if ('stderr' in error && typeof error.stderr === 'string') { // Common for child process errors
+        errorDetails = error.stderr;
+      }
+    }
+
     res.status(500).json({
-      error: "Failed to process video section",
-      details: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
+      details: errorDetails,
+      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)) // Send more error info for debugging
     });
   }
 });

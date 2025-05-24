@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { authClient } from "@/lib/auth-client";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export async function GET() {
-  const session = await authClient.useSession();
+  const incomingHeaders = await headers();
+  const session = await auth.api.getSession({ headers: new Headers(incomingHeaders) });
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

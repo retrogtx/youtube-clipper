@@ -143,24 +143,42 @@ export default function Editor() {
         }),
       });
 
-      const responseText = await clipResponse.text();
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        throw new Error("Server returned invalid JSON");
-      }
-
       if (!clipResponse.ok) {
-        throw new Error(
-          responseData?.details ||
-            responseData?.error ||
-            "Failed to process video"
-        );
+        // Try to parse the error response as JSON, as per our improved backend error handling
+        let errorData = { error: "Failed to process video", details: "No details from server." };
+        try {
+          const errorJson = await clipResponse.json();
+          errorData = {
+            error: errorJson.error || errorData.error,
+            details: errorJson.details || errorData.details,
+          };
+        } catch (parseError) {
+          // If it's not JSON, use the status text or a generic message
+          errorData.details = clipResponse.statusText || "Server returned a non-JSON error response.";
+        }
+        throw new Error(`${errorData.error} (Details: ${errorData.details})`);
       }
 
-      // Direct download using window.open
-      window.open(responseData.downloadUrl, "_blank");
+      // Handle direct file download
+      const blob = await clipResponse.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      // Extract filename from content-disposition header if available, otherwise default
+      const disposition = clipResponse.headers.get('content-disposition');
+      let filename = "clip.mp4";
+      if (disposition && disposition.indexOf('attachment') !== -1) {
+        const filenameRegex = /filename[^;=\n]*=((['"])(.*?)\2|[^;\n]*)/;
+        const matches = filenameRegex.exec(disposition);
+        if (matches != null && matches[3]) {
+          filename = matches[3];
+        }
+      }
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      a.remove();
 
       // Update download count
       const newCount = downloadCount + 1;
