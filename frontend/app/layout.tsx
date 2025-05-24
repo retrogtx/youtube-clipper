@@ -9,8 +9,9 @@ const font = Host_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Video Clipper",
-  description: "Extract perfect clips from your desired video",
+  title: "Clippa",
+  description:
+    "A no-bullsh!t video clipper that allows you to clip and download bangers from YT.",
 };
 
 export default function RootLayout({

@@ -10,9 +10,8 @@ import {
   Monitor,
   Smartphone,
   Square,
-  ArrowUp,
   ChevronDown,
-  Scissors,
+  ArrowDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,15 +19,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import Image from "next/image";
+import Buy from "@/components/buy";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function Editor() {
   const [url, setUrl] = useState("");
   const [startTime, setStartTime] = useState("00:00:00");
   const [endTime, setEndTime] = useState("00:00:00");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [isPremium, setIsPremium] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<{
     title?: string;
     description?: string;
@@ -40,6 +41,8 @@ export default function Editor() {
   >("original");
   const [isMetadataLoading, setIsMetadataLoading] = useState(true);
   const { data: session } = authClient.useSession();
+  const [downloadCount, setDownloadCount] = useState(0);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   const getVideoId = (url: string) => {
     const regExp =
       /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
@@ -65,7 +68,9 @@ export default function Editor() {
         thumbnail: data.thumbnail,
       });
       setThumbnailUrl(
-        data.image || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+        data.image
+          ? data.image
+          : `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
       );
     } catch (error) {
       console.error("Error fetching metadata:", error);
@@ -86,21 +91,43 @@ export default function Editor() {
       setIsMetadataLoading(true);
       fetchVideoMetadata(videoId);
     } else {
-      setThumbnailUrl("");
+      setThumbnailUrl(null);
       setMetadata({});
       setIsMetadataLoading(false);
     }
   }, [url]);
 
   useEffect(() => {
-    if (!loading) return;
-  }, [loading]);
+    const storedCount = localStorage.getItem("bangers");
+    setDownloadCount(storedCount ? parseInt(storedCount) : 0);
+  }, []);
+
+  useEffect(() => {
+    const checkPremiumStatus = async () => {
+      try {
+        const response = await fetch("/api/user/premium");
+        const data = await response.json();
+        setIsPremium(data.isPremium);
+        setShowPremiumModal(!data.isPremium);
+      } catch (error) {
+        console.error("Error checking premium status:", error);
+      }
+    };
+
+    if (session?.user) {
+      checkPremiumStatus();
+    }
+  }, [session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!isPremium) {
+      setShowPremiumModal(true);
+      return;
+    }
+
     setLoading(true);
-    setError("");
 
     try {
       const clipResponse = await fetch("http://localhost:3001/api/clip", {
@@ -116,31 +143,32 @@ export default function Editor() {
         }),
       });
 
-      if (!clipResponse.ok) {
-        // Try to parse error JSON, fallback to text
-        let errorMsg = "Failed to process video section";
-        try {
-          const errorData = await clipResponse.json();
-          errorMsg = errorData.details || errorData.error || errorMsg;
-        } catch {
-          errorMsg = await clipResponse.text();
-        }
-        throw new Error(errorMsg);
+      const responseText = await clipResponse.text();
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        throw new Error("Server returned invalid JSON");
       }
 
-      // Get the blob and trigger download
-      const blob = await clipResponse.blob();
-      const urlObj = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = urlObj;
-      a.download = "clip.mp4";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(urlObj);
+      if (!clipResponse.ok) {
+        throw new Error(
+          responseData?.details ||
+            responseData?.error ||
+            "Failed to process video"
+        );
+      }
+
+      // Direct download using window.open
+      window.open(responseData.downloadUrl, "_blank");
+
+      // Update download count
+      const newCount = downloadCount + 1;
+      localStorage.setItem("bangers", String(newCount));
+      setDownloadCount(newCount);
     } catch (err) {
       console.error("Error in handleSubmit:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
+      // Add user-friendly error handling here
     } finally {
       setLoading(false);
     }
@@ -161,46 +189,70 @@ export default function Editor() {
       <nav className="flex flex-col w-full gap-4 fixed top-0 left-0 right-0 z-50">
         <div className="flex flex-col gap-6 p-4">
           <div className="flex justify-between items-start">
-            <button
-              className="font-medium rounded-full border py-2 bg-card px-4 cursor-pointer hover:bg-card/50 transition-colors"
-              onClick={() => {
-                setIsSidebarOpen(!isSidebarOpen);
-              }}
+            <motion.button
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ delay: 0.4 }}
+              className="font-medium rounded-full border py-2 bg-card px-4 cursor-pointer hover:bg-card/50"
             >
               👋 Hey, {session?.user.name.split(" ")[0]}!
-            </button>
-            <Button variant="destructive" size="icon" onClick={handleLogout}>
-              <LogOut className="h-5 w-5" />
-            </Button>
+            </motion.button>
+            <motion.span
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ delay: 0.4 }}
+            >
+              <Button variant="destructive" size="icon" onClick={handleLogout}>
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </motion.span>
           </div>
         </div>
       </nav>
 
-      {/* <section className="flex flex-col gap-6 h-full">
-        {thumbnailUrl && (
-          <>
-            <div className="flex flex-col md:flex-row gap-6 bg-muted/50 p-4 rounded-xl">
-              {thumbnailUrl === "loading" || isMetadataLoading ? (
-                <>
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-1/2 mt-2" />
-                  <div className="mt-4 pt-4 border-t border-border/10">
-                    <Skeleton className="h-4 w-1/4 mb-2" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-1/3" />
-                      <Skeleton className="h-4 w-1/3" />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
+      <section className="flex flex-col w-full gap-4 max-w-3xl mx-auto z-50 transition-all duration-300">
+        <AnimatePresence mode="wait">
+          {!isMetadataLoading && thumbnailUrl === null ? (
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="text-2xl lg:text-3xl font-medium tracking-tight text-center mx-auto"
+            >
+              What do you wanna clip?
+            </motion.h1>
+          ) : isMetadataLoading ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex flex-col gap-6 h-full w-fit mx-auto"
+            >
+              <div className="flex flex-col md:flex-row gap-4 bg-muted/50 p-2 rounded-lg items-center">
+                <div className="w-20 h-[45px] bg-muted animate-pulse rounded-md" />
+                <div className="flex flex-col gap-2">
+                  <div className="h-6 w-48 bg-muted animate-pulse rounded-md" />
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex flex-col gap-6 h-full w-fit mx-auto"
+            >
+              <div className="flex flex-col md:flex-row gap-4 bg-muted/50 p-2 rounded-lg items-center">
+                {thumbnailUrl && (
                   <Image
                     unoptimized
                     width={1280}
                     height={720}
                     src={thumbnailUrl}
                     alt="Video thumbnail"
-                    className="w-full md:w-1/3 object-cover aspect-video rounded-xl"
+                    className="w-20 object-cover aspect-video rounded-md"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       if (target.src.includes("maxresdefault")) {
@@ -211,26 +263,21 @@ export default function Editor() {
                       }
                     }}
                   />
-                  <div className="flex flex-col gap-2">
-                    <h3 className="font-medium">{metadata.title}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {metadata.description}
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </section> */}
+                )}
+                <div className="flex flex-col gap-2">
+                  <h3 className="font-medium text-lg line-clamp-1">
+                    {metadata.title}
+                  </h3>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <section className="flex flex-col w-full gap-4 max-w-3xl mx-auto z-50">
-        <div className="flex items-center gap-2 text-center w-full">
-          <h1 className="text-2xl lg:text-3xl font-medium tracking-tight text-center mx-auto">
-            What do you want to clip?
-          </h1>
-        </div>
-        <form
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
           onSubmit={handleSubmit}
           className="flex flex-col gap-12 border p-4 bg-card rounded-3xl"
         >
@@ -248,7 +295,7 @@ export default function Editor() {
               {loading ? (
                 <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
-                <ArrowUp className="w-6 h-6" />
+                <ArrowDown className="w-6 h-6" />
               )}
             </Button>
           </div>
@@ -281,7 +328,7 @@ export default function Editor() {
               />
             </div>
             <div className="flex flex-col gap-2 w-full">
-              <Label htmlFor="cropRatio">Crop Ratio</Label>
+              <Label htmlFor="cropRatio">Ratio</Label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild id="cropRatio">
                   <Button
@@ -313,8 +360,25 @@ export default function Editor() {
               </DropdownMenu>
             </div>
           </div>
-        </form>
+        </motion.form>
+        {downloadCount > 0 && (
+          <div className="text-center mt-4 text-sm text-muted-foreground">
+            🔥 {downloadCount} bangers clipped
+          </div>
+        )}
       </section>
+      {showPremiumModal && (
+        <Buy
+          isOpen={showPremiumModal}
+          product={{
+            product_id: process.env.NEXT_PUBLIC_DODO_PAYMENTS_PRODUCT_ID!,
+            name: "Starter",
+            description: "Servers don't come cheap 🤷🏻",
+            price: 3,
+            currency: "$",
+          }}
+        />
+      )}
     </main>
   );
 }
