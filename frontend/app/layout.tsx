@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { Host_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "sonner";
 
 const font = Host_Grotesk({
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Video Clipper",
-  description: "Extract perfect clips from your desired video",
+  title: "Clippa",
+  description:
+    "A no-bullsh!t video clipper that allows you to clip and download bangers from YT.",
 };
 
 export default function RootLayout({
@@ -27,6 +29,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
