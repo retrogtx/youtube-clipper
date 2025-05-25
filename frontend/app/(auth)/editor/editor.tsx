@@ -403,6 +403,7 @@ export default function Editor() {
       {showPremiumModal && (
         <Buy
           isOpen={showPremiumModal}
+          setIsOpen={setShowPremiumModal}
           product={{
             product_id: process.env.NEXT_PUBLIC_DODO_PAYMENTS_PRODUCT_ID!,
             name: "Starter",
