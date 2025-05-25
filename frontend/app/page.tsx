@@ -3,12 +3,17 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import SignInModal from "@/components/sign-in";
 import Editor from "./(auth)/editor/editor";
-import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { motion } from "motion/react";
+import Link from "next/link";
+
+const fadeUpVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+};
 
 export default function App() {
   const { data: session, isPending } = authClient.useSession();
-  const router = useRouter();
 
   if (isPending) {
     return (
@@ -23,33 +28,69 @@ export default function App() {
   }
 
   return (
-    <main className="flex flex-col min-h-screen gap-6 relative overflow-hidden justify-end items-start w-full">
-      <section className="flex flex-col p-6 w-full">
-        <div className="flex flex-col gap-6 rounded-xl border bg-card/25 backdrop-blur-sm p-6 shadow-lg hover:shadow-xl transition-shadow max-w-md">
-          <div className="flex flex-col gap-6 w-full">
-            <div className="flex flex-col gap-2 max-w-md">
-              <h3 className="font-medium text-4xl tracking-tight">Clippa</h3>
-              <p className="">
-                A no-bullsh!t video clipper that allows you to clip and download
-                bangers from YT.
-              </p>
-            </div>
+    <main className="min-h-screen max-w-5xl mx-auto flex flex-col items-center justify-center px-4 md:px-6 lg:px-8 pt-32 pb-12 gap-16">
+      <div className="text-center flex flex-col gap-6 max-w-2xl mx-auto">
+        <div className="text-center flex flex-col gap-2">
+          <motion.h1
+            className={`text-4xl md:text-5xl font-medium tracking-tight`}
+            variants={fadeUpVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ duration: 0.5 }}
+          >
+            Snip Clips. Make Bangers.
+          </motion.h1>
 
-            <div className="flex w-full gap-2">
-              <SignInModal trigger={<Button>Get Started</Button>} />
-
-              <Button
-                variant="outline"
-                onClick={() =>
-                  router.push("https://github.com/retrogtx/youtube-clipper/")
-                }
-              >
-                Self-host Clippa
-              </Button>
-            </div>
-          </div>
+          <motion.p
+            className="text-secondary-foreground text-lg max-w-md mx-auto"
+            variants={fadeUpVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            Clippa is your platform for YT clips. Create bangers from your
+            favorite moments from videos.
+          </motion.p>
         </div>
-      </section>
+
+        <motion.div
+          className="flex gap-2 items-center justify-center"
+          variants={fadeUpVariants}
+          initial="initial"
+          animate="animate"
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <SignInModal trigger={<Button size="lg">Get started</Button>} />
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() =>
+              window.open(
+                "https://github.com/retrogtx/youtube-clipper/",
+                "_blank"
+              )
+            }
+          >
+            Self-host
+          </Button>
+        </motion.div>
+      </div>
+
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="border rounded-3xl"
+        src="/clippa.mp4"
+      />
+
+      <footer className="text-sm text-muted-foreground flex items-center gap-2">
+        <p>© 2025 Clippa. All rights reserved.</p>
+        <Link href="/terms" className="underline">
+          Terms & Conditions
+        </Link>
+      </footer>
     </main>
   );
 }

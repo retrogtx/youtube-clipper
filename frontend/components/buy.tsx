@@ -132,6 +132,17 @@ export default function Buy({
             Cancel
           </Button>
         </div>
+        <p className="text-xs text-gray-500 mt-4">
+          By subscribing, you agree to our{" "}
+          <a href="/terms" className="underline">
+            Terms & Conditions
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" className="underline">
+            Privacy Policy
+          </a>
+          . Subscriptions auto-renew until canceled. You can cancel anytime.
+        </p>
       </DialogContent>
     </Dialog>
   );
