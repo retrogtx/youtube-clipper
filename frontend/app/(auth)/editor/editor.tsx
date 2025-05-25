@@ -98,9 +98,11 @@ export default function Editor() {
   }, [url]);
 
   useEffect(() => {
-    const storedCount = localStorage.getItem("bangers");
-    setDownloadCount(storedCount ? parseInt(storedCount) : 0);
-  }, []);
+    if (session?.user?.id) {
+      const storedCount = localStorage.getItem(`bangers-${session.user.id}`);
+      setDownloadCount(storedCount ? parseInt(storedCount) : 0);
+    }
+  }, [session?.user?.id]);
 
   useEffect(() => {
     const checkPremiumStatus = async () => {
@@ -144,8 +146,10 @@ export default function Editor() {
       });
 
       if (!clipResponse.ok) {
-        // Try to parse the error response as JSON, as per our improved backend error handling
-        let errorData = { error: "Failed to process video", details: "No details from server." };
+        let errorData = {
+          error: "Failed to process video",
+          details: "No details from server.",
+        };
         try {
           const errorJson = await clipResponse.json();
           errorData = {
@@ -153,8 +157,10 @@ export default function Editor() {
             details: errorJson.details || errorData.details,
           };
         } catch (parseError) {
-          // If it's not JSON, use the status text or a generic message
-          errorData.details = clipResponse.statusText || "Server returned a non-JSON error response.";
+          console.error("Error parsing JSON:", parseError);
+          errorData.details =
+            clipResponse.statusText ||
+            "Server returned a non-JSON error response.";
         }
         throw new Error(`${errorData.error} (Details: ${errorData.details})`);
       }
@@ -165,9 +171,9 @@ export default function Editor() {
       const a = document.createElement("a");
       a.href = downloadUrl;
       // Extract filename from content-disposition header if available, otherwise default
-      const disposition = clipResponse.headers.get('content-disposition');
+      const disposition = clipResponse.headers.get("content-disposition");
       let filename = "clip.mp4";
-      if (disposition && disposition.indexOf('attachment') !== -1) {
+      if (disposition && disposition.indexOf("attachment") !== -1) {
         const filenameRegex = /filename[^;=\n]*=((['"])(.*?)\2|[^;\n]*)/;
         const matches = filenameRegex.exec(disposition);
         if (matches != null && matches[3]) {
@@ -182,7 +188,9 @@ export default function Editor() {
 
       // Update download count
       const newCount = downloadCount + 1;
-      localStorage.setItem("bangers", String(newCount));
+      if (session?.user?.id) {
+        localStorage.setItem(`bangers-${session.user.id}`, String(newCount));
+      }
       setDownloadCount(newCount);
     } catch (err) {
       console.error("Error in handleSubmit:", err);
@@ -204,7 +212,7 @@ export default function Editor() {
 
   return (
     <main className="flex flex-col w-full h-full min-h-screen p-4 gap-4 max-w-3xl mx-auto items-center justify-center">
-      <nav className="flex flex-col w-full gap-4 fixed top-0 left-0 right-0 z-50">
+      <nav className="flex flex-col w-full gap-4 fixed top-0 left-0 right-0 z-20">
         <div className="flex flex-col gap-6 p-4">
           <div className="flex justify-between items-start">
             <motion.button
@@ -230,7 +238,7 @@ export default function Editor() {
         </div>
       </nav>
 
-      <section className="flex flex-col w-full gap-4 max-w-3xl mx-auto z-50 transition-all duration-300">
+      <section className="flex flex-col w-full gap-4 max-w-3xl mx-auto transition-all duration-300">
         <AnimatePresence mode="wait">
           {!isMetadataLoading && thumbnailUrl === null ? (
             <motion.h1
@@ -379,11 +387,18 @@ export default function Editor() {
             </div>
           </div>
         </motion.form>
-        {downloadCount > 0 && (
-          <div className="text-center mt-4 text-sm text-muted-foreground">
-            🔥 {downloadCount} bangers clipped
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {downloadCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="text-center mt-4 text-sm text-muted-foreground"
+            >
+              🔥 {downloadCount} banger{downloadCount > 1 && "s"} clipped
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
       {showPremiumModal && (
         <Buy
