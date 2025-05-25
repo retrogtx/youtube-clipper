@@ -45,3 +45,11 @@ export const verification = pgTable("verification", {
  createdAt: timestamp('created_at'),
  updatedAt: timestamp('updated_at')
 				});
+
+export const payment = pgTable("payment", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
