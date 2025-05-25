@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "./ui/button";
-import { authClient } from "@/lib/auth-client";
 import { SubscriptionForm } from './subscription-form';
 
 type Product = {
@@ -45,14 +44,6 @@ export default function Buy({
   const [showBillingForm, setShowBillingForm] = useState(false);
   const router = useRouter();
 
-  const [billing] = useState({
-    name: "",
-    city: "",
-    country: "",
-    state: "",
-    street: "",
-    zipcode: "",
-  });
 
   const handleShowBillingForm = () => {
     setShowBillingForm(true);
