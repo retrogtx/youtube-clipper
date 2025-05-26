@@ -132,17 +132,10 @@ export default function Editor() {
     setLoading(true);
 
     try {
-      const clipResponse = await fetch("http://localhost:3001/api/clip", {
+      const clipResponse = await fetch("/api/clip", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url,
-          startTime,
-          endTime,
-          cropRatio,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, startTime, endTime, cropRatio }),
       });
 
       if (!clipResponse.ok) {
