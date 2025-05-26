@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "bun run src/index.ts"
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=bun"
   },
   "dependencies": {
     "@types/ffmpeg": "^1.0.7",
