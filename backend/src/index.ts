@@ -77,7 +77,7 @@ app.post("/api/clip", async (req, res) => {
       console.error(`yt-dlp stderr: ${data}`);
       processStderr += data.toString();
     });
-
+    
     let processStdout = "";
     ytDlp.stdout.on("data", (data) => {
       const output = data.toString();
@@ -157,6 +157,8 @@ app.post("/api/clip", async (req, res) => {
     });
   }
 });
+
+app.get("/", (req, res) => res.send("Server is alive!"));
 
 // Start the server
 app.listen(port, () => {
