@@ -65,7 +65,8 @@ app.post("/api/clip", async (req, res) => {
         // Format the download section string for yt-dlp
         const section = `*${startTime}-${endTime}`;
 
-        const ytDlp = spawn("yt-dlp", [
+        const cookiesFilePath = path.join(__dirname, "../src/cookies.txt");
+        const ytDlpArgs = [
           url,
           "-f",
           "bestvideo[protocol=https][ext=mp4]+bestaudio[protocol=https][ext=m4a]/bestvideo[protocol=https][ext=webm]+bestaudio[protocol=https][ext=webm]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=webm]+bestaudio[ext=webm]/best",
@@ -82,7 +83,19 @@ app.post("/api/clip", async (req, res) => {
           "--merge-output-format",
           "mp4",
           "--verbose",
-        ]);
+        ];
+
+        // Add cookies argument if cookies.txt exists
+        if (fs.existsSync(cookiesFilePath)) {
+          console.log(`Using cookies from: ${cookiesFilePath}`);
+          ytDlpArgs.push("--cookies", cookiesFilePath);
+        } else {
+          console.warn(
+            `Cookies file not found at ${cookiesFilePath}. Proceeding without cookies.`
+          );
+        }
+
+        const ytDlp = spawn("yt-dlp", ytDlpArgs);
 
         let processStderr = "";
         ytDlp.stderr.on("data", (data) => {
