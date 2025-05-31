@@ -7,7 +7,7 @@ import { promisify } from "util"; // For fs.unlink
 
 const unlinkAsync = promisify(fs.unlink); // Promisify fs.unlink for async cleanup
 
-const app = express();
+const app = express(); // HTTP server
 const port = process.env.PORT || 3001;
 
 // Middleware
