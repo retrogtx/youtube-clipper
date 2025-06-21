@@ -46,6 +46,14 @@ export const auth = betterAuth({
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.NEXT_PUBLIC_APP_URL,
 
+    // Origins allowed to make authenticated requests (for CORS and CSRF protection)
+    trustedOrigins: (
+      process.env.TRUSTED_ORIGINS ||
+      `${process.env.NEXT_PUBLIC_APP_URL},https://www.clippa.in,https://clippa.in`
+    )
+      .split(/,\s*/)
+      .filter(Boolean),
+
     // Optional: Enable email and password authentication
     emailAndPassword: {
         enabled: true, // Set to false if you only want social logins
