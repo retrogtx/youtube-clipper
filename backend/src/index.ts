@@ -10,7 +10,7 @@ const unlinkAsync = promisify(fs.unlink);
 
 dotenv.config();
 
-const app = express();
+const app = express(); // HTTP server
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
