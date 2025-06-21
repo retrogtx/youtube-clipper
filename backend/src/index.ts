@@ -70,7 +70,8 @@ app.post("/api/clip", async (req, res) => {
     }
 
     // Execute yt-dlp to download and clip the video in one step
-    const ytDlp = spawn("yt-dlp", ytDlpArgs);
+    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
+    const ytDlp = spawn(ytDlpPath, ytDlpArgs);
 
     let processStderr = "";
     ytDlp.stderr.on("data", (data) => {
