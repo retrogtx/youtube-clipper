@@ -13,7 +13,9 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
-const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:3000";
+const allowedOrigin = process.env.NODE_ENV === "production" 
+  ? "https://clippa.in" 
+  : "http://localhost:3000";
 
 const corsOptions: cors.CorsOptions = {
   origin: allowedOrigin,
