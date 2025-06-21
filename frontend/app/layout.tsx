@@ -14,40 +14,45 @@ export const metadata: Metadata = {
   description:
     "Premium YouTube video clipper with zero ads. Download & clip HD videos with precise timestamps. Simple pricing, maximum quality. 📼",
   keywords:
-    "video clipper, youtube downloader, HD video clips, video trimmer, youtube clips",
+    "video clipper, youtube downloader, HD video clips, video trimmer, youtube clips, clippa, clippa.in, youtube clipper, youtube video downloader, youtube video clipper, youtube video cutter, youtube video trimmer, youtube video editor, youtube video editor online, youtube video editor free, youtube video editor pro, youtube video editor premium, youtube video editor premium free, youtube video editor premium free download, youtube video editor premium free download online, youtube video editor premium free download online free, youtube video editor premium free download online free download, youtube video editor premium free download online free download free, youtube video editor premium free download online free download free download, ad free, premium",
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📼</text></svg>",
     shortcut:
       "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📼</text></svg>",
   },
   openGraph: {
+    url: "https://clippa.in/",
+    type: "website",
+    locale: "en_US",
+    siteName: "Clippa",
     title: "Clippa - Clean & Fast Video Clipper | HD YouTube Downloads",
     description:
       "Premium YouTube video clipper with zero ads. Download & clip HD videos with precise timestamps. Simple pricing, maximum quality.",
-    type: "website",
-    siteName: "Clippa",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Clippa - HD Video Clipper",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Clippa - Clean & Fast Video Clipper",
-    description:
-      "Premium YouTube video clipper with zero ads. Download & clip HD videos with precise timestamps.",
     images: ["/og-image.png"],
+  },
+  other: {
+    "twitter:image": ["/og-image.png"],
+    "twitter:card": "summary_large_image",
+    "twitter:url": "https://clippa.in/",
+    "twitter:domain": "clippa.in",
+    "twitter:title": "Clippa - Clean & Fast Video Clipper",
+    "twitter:description":
+      "Premium YouTube video clipper with zero ads. Download & clip HD videos with precise timestamps.",
+    "og:url": "https://clippa.in/",
+    "og:type": "website",
+    "og:title": "Clippa - Clean & Fast Video Clipper | HD YouTube Downloads",
+    "og:description":
+      "Premium YouTube video clipper with zero ads. Download & clip HD videos with precise timestamps. Simple pricing, maximum quality.",
+    "og:image": ["/og-image.png"],
   },
   robots: {
     index: true,
     follow: true,
+    nocache: true,
     googleBot: {
       index: true,
       follow: true,
+      noimageindex: false,
       "max-video-preview": -1,
       "max-image-preview": "large",
       "max-snippet": -1,
@@ -65,8 +70,8 @@ export default function RootLayout({
       <body className={`${font.className} antialiased min-h-screen`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <GradientBackground />

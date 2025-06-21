@@ -10,15 +10,8 @@ import {
   Monitor,
   Smartphone,
   Square,
-  ChevronDown,
   ArrowDown,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import Image from "next/image";
 import Buy from "@/components/buy";
 import { motion, AnimatePresence } from "motion/react";
@@ -231,7 +224,7 @@ export default function Editor() {
         </div>
       </nav>
 
-      <section className="flex flex-col w-full gap-4 max-w-3xl mx-auto transition-all duration-300">
+      <section className="flex flex-col w-full gap-4 max-w-xl mx-auto transition-all duration-300">
         <AnimatePresence mode="wait">
           {!isMetadataLoading && thumbnailUrl === null ? (
             <motion.h1
@@ -263,7 +256,7 @@ export default function Editor() {
               exit={{ opacity: 0, y: -20 }}
               className="flex flex-col gap-6 h-full w-fit mx-auto"
             >
-              <div className="flex flex-col md:flex-row gap-4 bg-muted/50 p-2 rounded-lg items-center">
+              <div className="flex flex-col md:flex-row gap-4 bg-muted/50 p-2 rounded-lg md:items-center">
                 {thumbnailUrl && (
                   <Image
                     unoptimized
@@ -319,64 +312,80 @@ export default function Editor() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-3 items-end gap-2">
-            <div className="flex flex-col gap-2 w-full">
-              <Label htmlFor="startTime">Start At</Label>
-              <Input
-                type="text"
-                id="startTime"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
-                placeholder="00:00:00"
-                required
-                className="font-mono text-sm"
-              />
+          <div className="flex flex-col gap-2 w-full">
+            <div className="flex gap-3 w-full items-center">
+              <div className="flex flex-col gap-2 w-full">
+                <Label htmlFor="startTime" className="sr-only">
+                  Start Time
+                </Label>
+                <Input
+                  type="text"
+                  id="startTime"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+                  placeholder="00:00:00"
+                  required
+                  className="font-mono text-sm"
+                />
+              </div>
+              <span className="text-sm text-muted-foreground">to</span>
+              <div className="flex flex-col gap-2 w-full">
+                <Label htmlFor="endTime" className="sr-only">
+                  End Time
+                </Label>
+                <Input
+                  type="text"
+                  id="endTime"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+                  placeholder="00:00:00"
+                  required
+                  className="font-mono text-sm"
+                />
+              </div>
             </div>
+
             <div className="flex flex-col gap-2 w-full">
-              <Label htmlFor="endTime">End At</Label>
-              <Input
-                type="text"
-                id="endTime"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
-                placeholder="00:00:00"
-                required
-                className="font-mono text-sm"
-              />
-            </div>
-            <div className="flex flex-col gap-2 w-full">
-              <Label htmlFor="cropRatio">Ratio</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild id="cropRatio">
-                  <Button
-                    variant="outline"
-                    className="flex items-center gap-2 w-full justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      {resolutionOptions[cropRatio].icon}
-                      <span>{resolutionOptions[cropRatio].label}</span>
-                    </div>
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-52">
-                  {Object.entries(resolutionOptions).map(
-                    ([key, { icon, label }]) => (
-                      <DropdownMenuItem
-                        key={key}
-                        onClick={() => setCropRatio(key as typeof cropRatio)}
+              <Label htmlFor="cropRatio" className="sr-only">
+                Crop Ratio
+              </Label>
+              <div className="flex items-center justify-between p-2 rounded-2xl border relative bg-white/5 backdrop-blur-md">
+                {Object.entries(resolutionOptions).map(
+                  ([key, { icon, label }]) => (
+                    <div
+                      key={key}
+                      onClick={() => setCropRatio(key as typeof cropRatio)}
+                      className="relative cursor-pointer w-full group text-center py-1.5 overflow-visible hover:scale-105 transition-all duration-300 ease-[cubic-bezier(0.175, 0.885, 0.32, 1.275)] px-4"
+                    >
+                      {cropRatio === key && (
+                        <motion.div
+                          layoutId="hover"
+                          className="absolute inset-0 bg-primary rounded-md"
+                          transition={{
+                            type: "spring",
+                            stiffness: 120,
+                            damping: 10,
+                            mass: 0.2,
+                            ease: [0, 1, 0.35, 0],
+                          }}
+                        />
+                      )}
+                      <span
+                        className={`relative flex text-xs sm:text-sm items-center gap-2 justify-center ${
+                          cropRatio === key
+                            ? "text-primary-foreground"
+                            : "text-foreground"
+                        }`}
                       >
-                        <div className="flex items-center gap-2">
-                          {icon}
-                          <span>{label}</span>
-                        </div>
-                      </DropdownMenuItem>
-                    )
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                        {icon}
+                        <span>{label}</span>
+                      </span>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           </div>
         </motion.form>
