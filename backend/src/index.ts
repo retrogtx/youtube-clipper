@@ -65,7 +65,7 @@ app.post("/api/clip", async (req, res) => {
       const ytArgs = [
         url,
         "-f",
-        "bestvideo[protocol=https][ext=mp4]+bestaudio[protocol=https][ext=m4a]/best[ext=mp4]/best",
+        "bv[ext=mp4][vcodec^=avc1][height<=720][fps<=30]+ba[ext=m4a][acodec^=mp4a]/best[ext=mp4][vcodec^=avc1]",
         "--download-sections",
         section,
         "-o",
