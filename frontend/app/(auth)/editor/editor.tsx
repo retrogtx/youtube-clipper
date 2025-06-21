@@ -125,39 +125,39 @@ export default function Editor() {
     setLoading(true);
 
     try {
-      const clipResponse = await fetch("/api/clip", {
+      // Step 1: kick-off processing
+      const clipKickoff = await fetch("/api/clip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, startTime, endTime, cropRatio }),
       });
 
-      if (!clipResponse.ok) {
-        let errorData = {
-          error: "Failed to process video",
-          details: "No details from server.",
-        };
-        try {
-          const errorJson = await clipResponse.json();
-          errorData = {
-            error: errorJson.error || errorData.error,
-            details: errorJson.details || errorData.details,
-          };
-        } catch (parseError) {
-          console.error("Error parsing JSON:", parseError);
-          errorData.details =
-            clipResponse.statusText ||
-            "Server returned a non-JSON error response.";
-        }
-        throw new Error(`${errorData.error} (Details: ${errorData.details})`);
+      if (!clipKickoff.ok) {
+        const errJson = await clipKickoff.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to start processing");
       }
 
-      // Handle direct file download
-      const blob = await clipResponse.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
+      const { id } = (await clipKickoff.json()) as { id: string };
+
+      // Step 2: poll until ready
+      let status = "processing" as "processing" | "ready" | "error";
+      while (status === "processing") {
+        await new Promise((r) => setTimeout(r, 3000)); // 3-second polling
+        const pollRes = await fetch(`/api/clip/${id}`);
+        if (!pollRes.ok) throw new Error("Failed to poll job status");
+        const pollJson = (await pollRes.json()) as { status: string; error?: string };
+        status = pollJson.status as any;
+        if (status === "error") throw new Error(pollJson.error || "Processing failed");
+      }
+
+      // Step 3: download the finished clip
+      const downloadRes = await fetch(`/api/clip/${id}?download=1`);
+      if (!downloadRes.ok) throw new Error("Failed to download clip");
+
+      const blob = await downloadRes.blob();
+
       // Extract filename from content-disposition header if available, otherwise default
-      const disposition = clipResponse.headers.get("content-disposition");
+      const disposition = downloadRes.headers.get("content-disposition");
       let filename = "clip.mp4";
       if (disposition && disposition.indexOf("attachment") !== -1) {
         const filenameRegex = /filename[^;=\n]*=((['"])(.*?)\2|[^;\n]*)/;
@@ -166,6 +166,9 @@ export default function Editor() {
           filename = matches[3];
         }
       }
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
