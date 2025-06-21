@@ -168,7 +168,7 @@ export default function Buy({
           <a href="/privacy" className="underline">
             Privacy Policy
           </a>
-          . Subscriptions auto-renew until canceled. You can cancel anytime.
+          . Subscriptions auto-renew until canceled.
         </p>
         </>
         )}

@@ -7,8 +7,7 @@ export default function Terms() {
         <div>
           <h2 className="text-xl font-semibold mb-3">1. Subscription Terms</h2>
           <p>
-            Your subscription will continue until terminated. You can cancel at
-            any time through your account settings.
+            Your subscription will continue until terminated. 
           </p>
         </div>
 
@@ -23,15 +22,14 @@ export default function Terms() {
         <div>
           <h2 className="text-xl font-semibold mb-3">3. Usage Rights</h2>
           <p>
-            This service is for personal use only. You may not redistribute or
-            resell downloaded content.
+            This service is for personal use only. 
           </p>
         </div>
 
         <div>
           <h2 className="text-xl font-semibold mb-3">4. Refund Policy</h2>
           <p>
-            Refunds are handled on a case-by-case basis. Contact support within
+            Refunds are handled on a case-by-case basis. Contact support on iamamrit27@gmail.com within
             14 days of purchase for refund requests.
           </p>
         </div>
