@@ -140,13 +140,16 @@ export default function Editor() {
       const { id } = (await clipKickoff.json()) as { id: string };
 
       // Step 2: poll until ready
-      let status = "processing" as "processing" | "ready" | "error";
+      type JobStatus = "processing" | "ready" | "error";
+      interface JobStatusResponse { status: JobStatus; error?: string }
+
+      let status: JobStatus = "processing";
       while (status === "processing") {
         await new Promise((r) => setTimeout(r, 3000)); // 3-second polling
         const pollRes = await fetch(`/api/clip/${id}`);
         if (!pollRes.ok) throw new Error("Failed to poll job status");
-        const pollJson = (await pollRes.json()) as { status: string; error?: string };
-        status = pollJson.status as any;
+        const pollJson = (await pollRes.json()) as JobStatusResponse;
+        status = pollJson.status;
         if (status === "error") throw new Error(pollJson.error || "Processing failed");
       }
 

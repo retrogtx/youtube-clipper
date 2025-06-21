@@ -114,10 +114,11 @@ app.post("/api/clip", async (req, res) => {
 
       job.status = 'ready';
       console.log(`[job ${id}] ready`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[job ${id}] failed`, err);
       job.status = 'error';
-      job.error = err?.message ?? 'unknown';
+      const message = err instanceof Error ? err.message : String(err);
+      job.error = message;
     }
   })();
 

@@ -1,14 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const backendBase = `${process.env.BACKEND_API_URL}/api/clip/${params.id}`;
-  const url = new URL(req.url);
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const backendBase = `${process.env.BACKEND_API_URL}/api/clip/${id}`;
+  const url = new URL(request.url);
   // Preserve query string (e.g. ?download=1)
   const target = backendBase + url.search;
 
-  const backendRes = await fetch(target, {
-    method: "GET",
-  });
+  const backendRes = await fetch(target);
 
   // If this is the download request (?download=1) we need to pipe the stream & headers
   if (url.searchParams.get("download") === "1") {
