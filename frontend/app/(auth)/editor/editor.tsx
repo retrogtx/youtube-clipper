@@ -401,7 +401,7 @@ export default function Editor() {
             product_id: process.env.NEXT_PUBLIC_DODO_PAYMENTS_PRODUCT_ID!,
             name: "Starter",
             description: "Servers don't come cheap 🤷🏻",
-            price: 3,
+            price: 4,
             currency: "$",
           }}
         />

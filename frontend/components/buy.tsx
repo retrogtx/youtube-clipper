@@ -95,6 +95,8 @@ export default function Buy({
         <DialogTitle className="text-4xl font-bold mb-0">
           {product.currency}
           {product.price}
+          {" "}
+          per month
         </DialogTitle>
         {!showBillingForm && (
           <>
@@ -116,7 +118,7 @@ export default function Buy({
               </li>
               <li className="flex items-center gap-2">
                 <span>❤️</span>
-                Support the developers (we&apos;re not rich)
+                Support the developers (we got servers to pay for :)
               </li>
             </ul>
           </>

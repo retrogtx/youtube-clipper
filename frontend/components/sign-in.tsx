@@ -45,8 +45,7 @@ export default function SignInModal({ trigger }: SignInModalProps) {
         <div className="flex flex-col gap-2">
           <DialogTitle className="text-2xl font-semibold">Sign In</DialogTitle>
           <DialogDescription>
-            Google already has your data, so we don&apos;t need to ask for it
-            again.
+            One step closer to clipping your favorite videos.
           </DialogDescription>
         </div>
         <div className="flex w-full items-center justify-center pt-4">

@@ -1,4 +1,5 @@
 import express from "express";
+import dotenv from "dotenv";
 import cors from "cors";
 import { spawn } from "child_process";
 import path from "path";
@@ -7,11 +8,19 @@ import { promisify } from "util";
 
 const unlinkAsync = promisify(fs.unlink);
 
+dotenv.config();
+
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
+const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:3000";
+
+const corsOptions: cors.CorsOptions = {
+  origin: allowedOrigin,
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Ensure uploads directory exists

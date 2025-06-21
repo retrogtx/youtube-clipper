@@ -61,18 +61,6 @@ export default function App() {
           transition={{ duration: 0.5, delay: 0.2 }}
         >
           <SignInModal trigger={<Button size="lg">Get started</Button>} />
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() =>
-              window.open(
-                "https://github.com/retrogtx/youtube-clipper/",
-                "_blank"
-              )
-            }
-          >
-            Self-host
-          </Button>
         </motion.div>
       </div>
 
