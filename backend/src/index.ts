@@ -4,11 +4,20 @@ import cors from "cors";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { promisify } from "util";
-
-const unlinkAsync = promisify(fs.unlink);
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
+
+// --- Supabase setup ---
+const supabaseUrl = process.env.SUPABASE_URL as string;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY as string;
+const bucketName = process.env.SUPABASE_BUCKET || 'videos';
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Supabase credentials are not set in environment variables');
+}
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false }
+});
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -39,6 +48,8 @@ interface Job {
   id: string;
   status: 'processing' | 'ready' | 'error';
   filePath?: string;
+  storagePath?: string;
+  publicUrl?: string;
   error?: string;
 }
 const jobs = new Map<string, Job>();
@@ -242,9 +253,32 @@ app.post("/api/clip", async (req, res) => {
         await fs.promises.unlink(subPath).catch(() => {});
       }
 
+      // ---- Upload processed clip to Supabase ----
+      const objectPath = `clip-${id}.mp4`;
+      console.log(`[job ${id}] uploading to Supabase: ${objectPath}`);
+      const fileBuffer = await fs.promises.readFile(outputPath);
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(objectPath, fileBuffer, {
+          contentType: 'video/mp4',
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      console.log(`[job ${id}] upload successful, getting public URL`);
+      const { data: pub } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(objectPath);
+
+      // Remove local file after upload
+      await fs.promises.unlink(outputPath).catch(() => {});
+
+      job.storagePath = objectPath;
+      job.publicUrl = pub.publicUrl;
+
       job.status = 'ready';
       saveJob(job);
-      console.log(`[job ${id}] ready`);
+      console.log(`[job ${id}] ready - storagePath: ${job.storagePath}, publicUrl: ${job.publicUrl}`);
     } catch (err: unknown) {
       console.error(`[job ${id}] failed`, err);
       job.status = 'error';
@@ -273,16 +307,44 @@ app.get('/api/clip/:id', async (req, res) => {
   }
 
   if (download === '1') {
-    if (job.status !== 'ready' || !job.filePath) return res.status(409).json({ status: job.status });
-    return res.download(job.filePath, 'clip.mp4', async err => {
-      if (err) console.error(`[job ${id}] send error`, err);
-      try { if (job.filePath) await unlinkAsync(job.filePath); } catch {}
-      deleteJob(id);
-      console.log(`[job ${id}] completed and removed from persistent storage. Total jobs:`, jobs.size);
+    // Frontend should handle download directly from Supabase URL
+    return res.status(400).json({ 
+      error: 'Use the public URL directly. Backend only provides the URL, frontend handles download and cleanup.' 
     });
   }
 
-  return res.json({ status: job.status, error: job.error });
+  return res.json({ 
+    status: job.status, 
+    error: job.error, 
+    url: job.publicUrl,
+    storagePath: job.storagePath 
+  });
+});
+
+// Cleanup endpoint for frontend to delete files after download
+app.delete('/api/clip/:id/cleanup', async (req, res) => {
+  const { id } = req.params;
+  let job = jobs.get(id);
+  
+  // If not in memory, try to load from persistent storage
+  if (!job) {
+    job = loadJob(id) || undefined;
+  }
+  
+  if (!job) {
+    return res.status(404).json({ error: 'job not found' });
+  }
+
+  try {
+    // Only clean up job metadata (Supabase cleanup is handled by frontend)
+    deleteJob(id);
+    console.log(`[job ${id}] job metadata cleaned up successfully`);
+    
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(`[job ${id}] job cleanup error:`, err);
+    return res.status(500).json({ error: 'Job cleanup failed' });
+  }
 });
 
 app.get("/api/formats", async (req, res) => {
@@ -395,6 +457,42 @@ app.get("/api/formats", async (req, res) => {
 });
 
 app.get("/", (req, res) => res.send("Server is alive!"));
+
+// Test Supabase connection
+app.get("/api/test-supabase", async (req, res) => {
+  try {
+    console.log("Testing Supabase connection...");
+    console.log("Bucket name:", bucketName);
+    
+    // Test bucket access
+    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+    if (bucketError) {
+      console.error("Bucket list error:", bucketError);
+      return res.status(500).json({ error: "Failed to list buckets", details: bucketError });
+    }
+    
+    console.log("Available buckets:", buckets?.map(b => b.name));
+    
+    // Test bucket contents
+    const { data: files, error: fileError } = await supabase.storage.from(bucketName).list();
+    if (fileError) {
+      console.error("File list error:", fileError);
+      return res.status(500).json({ error: "Failed to list files", details: fileError });
+    }
+    
+    console.log("Files in bucket:", files?.map(f => f.name));
+    
+    return res.json({ 
+      success: true, 
+      bucketName,
+      buckets: buckets?.map(b => b.name),
+      files: files?.map(f => f.name)
+    });
+  } catch (err) {
+    console.error("Supabase test error:", err);
+    return res.status(500).json({ error: "Supabase test failed", details: err });
+  }
+});
 
 // Clean up old job files on startup
 function cleanupOldJobs() {

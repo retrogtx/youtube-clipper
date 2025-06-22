@@ -158,7 +158,11 @@ export default function Editor() {
 
       // Step 2: poll until ready
       type JobStatus = "processing" | "ready" | "error";
-      interface JobStatusResponse { status: JobStatus; error?: string }
+      interface JobStatusResponse { 
+        status: JobStatus; 
+        error?: string; 
+        url?: string; 
+      }
 
       let status: JobStatus = "processing";
       while (status === "processing") {
@@ -170,26 +174,15 @@ export default function Editor() {
         if (status === "error") throw new Error(pollJson.error || "Processing failed");
       }
 
-      // Step 3: download the finished clip
-      const downloadRes = await fetch(`/api/clip/${id}?download=1`);
+      // Step 3: Download via frontend route (handles Supabase download and cleanup)
+      const downloadRes = await fetch(`/api/clip/${id}/download`);
       if (!downloadRes.ok) throw new Error("Failed to download clip");
 
       const blob = await downloadRes.blob();
-
-      // Extract filename from content-disposition header if available, otherwise default
-      const disposition = downloadRes.headers.get("content-disposition");
-      let filename = "clip.mp4";
-      if (disposition && disposition.indexOf("attachment") !== -1) {
-        const filenameRegex = /filename[^;=\n]*=((['"])(.*?)\2|[^;\n]*)/;
-        const matches = filenameRegex.exec(disposition);
-        if (matches != null && matches[3]) {
-          filename = matches[3];
-        }
-      }
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = filename;
+      a.download = "clip.mp4";
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(downloadUrl);
