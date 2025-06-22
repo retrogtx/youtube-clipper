@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Loader2,
   LogOut,
@@ -20,6 +21,7 @@ export default function Editor() {
   const [url, setUrl] = useState("");
   const [startTime, setStartTime] = useState("00:00:00");
   const [endTime, setEndTime] = useState("00:00:00");
+  const [addSubs, setAddSubs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -129,7 +131,7 @@ export default function Editor() {
       const clipKickoff = await fetch("/api/clip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, startTime, endTime, cropRatio }),
+        body: JSON.stringify({ url, startTime, endTime, cropRatio, subtitles: addSubs }),
       });
 
       if (!clipKickoff.ok) {
@@ -392,6 +394,17 @@ export default function Editor() {
                   )
                 )}
               </div>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <Switch
+                id="subtitles-switch"
+                checked={addSubs}
+                onCheckedChange={setAddSubs}
+              />
+              <Label htmlFor="subtitles-switch">
+                Add subtitles (English only)
+              </Label>
             </div>
           </div>
         </motion.form>

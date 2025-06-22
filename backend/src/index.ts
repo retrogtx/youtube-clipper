@@ -25,13 +25,11 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, "../uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
-// Job storage (in-memory). For production you might switch to Redis or DB.
 interface Job {
   id: string;
   status: 'processing' | 'ready' | 'error';
@@ -44,9 +42,8 @@ function createJobId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// Kick-off clip creation – returns a job id immediately
 app.post("/api/clip", async (req, res) => {
-  const { url, startTime, endTime } = req.body || {};
+  const { url, startTime, endTime, subtitles } = req.body || {};
   if (!url || !startTime || !endTime) {
     return res.status(400).json({ error: "url, startTime, and endTime are required" });
   }
@@ -56,7 +53,6 @@ app.post("/api/clip", async (req, res) => {
   const job: Job = { id, status: 'processing', filePath: outputPath };
   jobs.set(id, job);
 
-  // Start async worker (non-blocking)
   (async () => {
     try {
       const section = `*${startTime}-${endTime}`;
@@ -80,6 +76,16 @@ app.post("/api/clip", async (req, res) => {
         "user-agent:Mozilla/5.0",
         "--verbose",
       ];
+      if (subtitles) {
+        ytArgs.push(
+          "--write-subs",
+          "--write-auto-subs",
+          "--sub-lang",
+          "en",
+          "--sub-format",
+          "vtt"
+        );
+      }
       if (fs.existsSync(cookiesFilePath)) ytArgs.push("--cookies", cookiesFilePath);
 
       console.log(`[job ${id}] starting yt-dlp`);
@@ -94,23 +100,44 @@ app.post("/api/clip", async (req, res) => {
         yt.on('error', reject);
       });
 
-      // faststart – relocate moov atom to head for compatibility
       const fastPath = path.join(uploadsDir, `clip-${id}-fast.mp4`);
+      const subPath = outputPath.replace(/\.mp4$/, ".en.vtt");
+      const subtitlesExist = fs.existsSync(subPath);
+
       await new Promise<void>((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
+        const ffmpegArgs = [
           '-y',
           '-i', outputPath,
-          '-c', 'copy',
+        ];
+
+        if (subtitles && subtitlesExist) {
+          console.log(`[job ${id}] burning subtitles from ${subPath}`);
+          ffmpegArgs.push(
+            '-vf', `subtitles=${subPath}`,
+            '-c:a', 'copy'
+          );
+        } else {
+          ffmpegArgs.push('-c', 'copy');
+        }
+
+        ffmpegArgs.push(
           '-movflags', '+faststart',
-          fastPath,
-        ]);
+          fastPath
+        );
+
+        console.log(`[job ${id}] running ffmpeg`, ffmpegArgs.join(' '));
+        const ff = spawn('ffmpeg', ffmpegArgs);
         ff.stderr.on('data', d => console.error(`[job ${id}] ffmpeg`, d.toString()));
         ff.on('close', c => c === 0 ? resolve() : reject(new Error(`ffmpeg exited ${c}`)));
         ff.on('error', reject);
       });
-      // Replace original
+
       await fs.promises.unlink(outputPath).catch(()=>{});
       await fs.promises.rename(fastPath, outputPath);
+      
+      if (subtitlesExist) {
+        await fs.promises.unlink(subPath).catch(() => {});
+      }
 
       job.status = 'ready';
       console.log(`[job ${id}] ready`);
@@ -125,7 +152,6 @@ app.post("/api/clip", async (req, res) => {
   return res.status(202).json({ id });
 });
 
-// Poll job status or download when ready
 app.get('/api/clip/:id', async (req, res) => {
   const { id } = req.params;
   const { download } = req.query;
@@ -136,7 +162,6 @@ app.get('/api/clip/:id', async (req, res) => {
     if (job.status !== 'ready' || !job.filePath) return res.status(409).json({ status: job.status });
     return res.download(job.filePath, 'clip.mp4', async err => {
       if (err) console.error(`[job ${id}] send error`, err);
-      // clean up after send
       try { if (job.filePath) await unlinkAsync(job.filePath); } catch {}
       jobs.delete(id);
     });
@@ -147,7 +172,6 @@ app.get('/api/clip/:id', async (req, res) => {
 
 app.get("/", (req, res) => res.send("Server is alive!"));
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
