@@ -24,14 +24,23 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
-  // Add userId from session to the body
-  body.userId = session.user.id;
+  // Add userId and ensure url field exists (backend expects 'url' field)
+  const backendPayload = {
+    ...body,
+    url: body.url,
+    userId: session.user.id,
+  };
+
+  // Validate required fields
+  if (!backendPayload.url) {
+    return NextResponse.json({ error: "url field is required" }, { status: 400 });
+  }
 
   // Forward to backend – expect 202 w/ { id }
   const backendRes = await fetch(`${process.env.BACKEND_API_URL}/api/clip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(backendPayload),
   });
 
   const json = await backendRes.json();
