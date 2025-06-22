@@ -42,8 +42,40 @@ function createJobId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function timeToSeconds(timeStr: string): number {
+  const parts = timeStr.split(':');
+  return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+}
+
+function secondsToTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toFixed(3).padStart(6, '0')}`;
+}
+
+async function adjustSubtitleTimestamps(inputPath: string, outputPath: string, startTime: string): Promise<void> {
+  const startSeconds = timeToSeconds(startTime);
+  const content = await fs.promises.readFile(inputPath, 'utf-8');
+  
+  // Regex to match VTT timestamp lines (e.g., "00:01:30.000 --> 00:01:35.000")
+  const timestampRegex = /(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})/g;
+  
+  const adjustedContent = content.replace(timestampRegex, (match, start, end) => {
+    const startSec = timeToSeconds(start) - startSeconds;
+    const endSec = timeToSeconds(end) - startSeconds;
+    
+    // Skip negative timestamps (before clip start)
+    if (startSec < 0) return match; // Keep original, will be filtered out by video duration
+    
+    return `${secondsToTime(startSec)} --> ${secondsToTime(endSec)}`;
+  });
+  
+  await fs.promises.writeFile(outputPath, adjustedContent, 'utf-8');
+}
+
 app.post("/api/clip", async (req, res) => {
-  const { url, startTime, endTime, subtitles } = req.body || {};
+  const { url, startTime, endTime, subtitles, formatId } = req.body || {};
   if (!url || !startTime || !endTime) {
     return res.status(400).json({ error: "url, startTime, and endTime are required" });
   }
@@ -60,8 +92,13 @@ app.post("/api/clip", async (req, res) => {
 
       const ytArgs = [
         url,
-        "-f",
-        "bv[ext=mp4][vcodec^=avc1][height<=2160][fps<=60]+ba[ext=m4a][acodec^=mp4a]/best[ext=mp4][vcodec^=avc1]",
+      ];
+      if (formatId) {
+        ytArgs.push("-f", formatId);
+      } else {
+        ytArgs.push("-f", "bv[ext=mp4][vcodec^=avc1][height<=2160][fps<=60]+ba[ext=m4a][acodec^=mp4a]/best[ext=mp4][vcodec^=avc1]");
+      }
+      ytArgs.push(
         "--download-sections",
         section,
         "-o",
@@ -74,8 +111,8 @@ app.post("/api/clip", async (req, res) => {
         "referer:youtube.com",
         "--add-header",
         "user-agent:Mozilla/5.0",
-        "--verbose",
-      ];
+        "--verbose"
+      );
       if (subtitles) {
         ytArgs.push(
           "--write-subs",
@@ -103,6 +140,14 @@ app.post("/api/clip", async (req, res) => {
       const fastPath = path.join(uploadsDir, `clip-${id}-fast.mp4`);
       const subPath = outputPath.replace(/\.mp4$/, ".en.vtt");
       const subtitlesExist = fs.existsSync(subPath);
+
+      // Adjust subtitle timestamps if subtitles exist
+      if (subtitles && subtitlesExist) {
+        const adjustedSubPath = path.join(uploadsDir, `clip-${id}-adjusted.vtt`);
+        await adjustSubtitleTimestamps(subPath, adjustedSubPath, startTime);
+        // Replace the original subtitle file with the adjusted one
+        await fs.promises.rename(adjustedSubPath, subPath);
+      }
 
       await new Promise<void>((resolve, reject) => {
         const ffmpegArgs = [
@@ -168,6 +213,102 @@ app.get('/api/clip/:id', async (req, res) => {
   }
 
   return res.json({ status: job.status, error: job.error });
+});
+
+app.get("/api/formats", async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: "url is required" });
+  }
+
+  try {
+    const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
+    const cookiesFilePath = path.join(__dirname, "../src/cookies.txt");
+    
+    const ytArgs = [
+      '-j', 
+      '--no-warnings',
+      '--no-check-certificates',
+      '--add-header',
+      'referer:youtube.com',
+      '--add-header',
+      'user-agent:Mozilla/5.0',
+      url as string
+    ];
+    
+    if (fs.existsSync(cookiesFilePath)) {
+      ytArgs.splice(-1, 0, '--cookies', cookiesFilePath);
+    }
+    
+    const yt = spawn(ytDlpPath, ytArgs);
+    
+    let jsonData = '';
+    yt.stdout.on('data', (data) => {
+      jsonData += data.toString();
+    });
+
+    let errorData = '';
+    yt.stderr.on('data', (data) => {
+        errorData += data.toString();
+    });
+
+    yt.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`[formats] yt-dlp exited with code ${code}`, errorData);
+        return res.status(500).json({ error: `yt-dlp exited with code ${code}` });
+      }
+      
+      try {
+        const info = JSON.parse(jsonData);
+        
+        // Get video-only formats (higher quality) and combined formats
+        const videoFormats = info.formats
+          .filter((f: any) => f.vcodec !== 'none' && f.height && (f.ext === 'mp4' || f.ext === 'webm'))
+          .map((f: any) => ({
+            format_id: f.format_id,
+            label: `${f.height}p${f.fps > 30 ? f.fps : ''}`,
+            height: f.height,
+            hasAudio: f.acodec !== 'none',
+            ext: f.ext
+          }))
+          .sort((a: any, b: any) => b.height - a.height);
+        
+        // Remove duplicates based on height and keep the best format for each resolution
+        const uniqueFormats = videoFormats.reduce((acc: any[], current: any) => {
+          const existing = acc.find((item) => item.label === current.label);
+          if (!existing) {
+            acc.push(current);
+          } else if (current.hasAudio && !existing.hasAudio) {
+            // Prefer formats with audio if available
+            const index = acc.findIndex((item) => item.label === current.label);
+            acc[index] = current;
+          }
+          return acc;
+        }, []);
+        
+        // If we need to use video-only formats, we'll use format selection that combines with best audio
+        const formatsForUser = uniqueFormats.map((f: any) => ({
+          format_id: f.hasAudio ? f.format_id : `${f.format_id}+bestaudio`,
+          label: f.label
+        }));
+        
+        return res.json({ formats: formatsForUser });
+      } catch (e) {
+          console.error('[formats] JSON parse error', e);
+          return res.status(500).json({ error: 'Failed to parse yt-dlp output'});
+      }
+    });
+
+    yt.on('error', (err) => {
+        console.error('[formats] yt-dlp spawn error', err);
+        return res.status(500).json({ error: 'Failed to start yt-dlp process' });
+    });
+
+  } catch (err: unknown) {
+    console.error(`[formats] failed`, err);
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: message });
+  }
 });
 
 app.get("/", (req, res) => res.send("Server is alive!"));

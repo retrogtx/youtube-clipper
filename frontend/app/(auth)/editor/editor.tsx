@@ -34,6 +34,8 @@ export default function Editor() {
   const [cropRatio, setCropRatio] = useState<
     "original" | "vertical" | "square"
   >("original");
+  const [formats, setFormats] = useState<{format_id: string, label: string}[]>([]);
+  const [selectedFormat, setSelectedFormat] = useState<string>('');
   const [isMetadataLoading, setIsMetadataLoading] = useState(true);
   const { data: session } = authClient.useSession();
   const [downloadCount, setDownloadCount] = useState(0);
@@ -51,22 +53,33 @@ export default function Editor() {
 
     try {
       const url = `https://www.youtube.com/watch?v=${videoId}`;
-      const response = await fetch(
+      const metadataResponse = await fetch(
         `/api/metadata?url=${encodeURIComponent(url)}`
       );
-      if (!response.ok) throw new Error("Failed to fetch video metadata");
-      const data = await response.json();
+      if (!metadataResponse.ok) throw new Error("Failed to fetch video metadata");
+      const metadata = await metadataResponse.json();
 
       setMetadata({
-        title: data.title,
-        description: data.description,
-        thumbnail: data.thumbnail,
+        title: metadata.title,
+        description: metadata.description,
+        thumbnail: metadata.thumbnail,
       });
       setThumbnailUrl(
-        data.image
-          ? data.image
+        metadata.image
+          ? metadata.image
           : `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
       );
+
+      // Fetch formats
+      const formatsResponse = await fetch(`/api/formats?url=${encodeURIComponent(url)}`);
+      if(formatsResponse.ok) {
+        const formatsData = await formatsResponse.json();
+        setFormats(formatsData.formats || []);
+        if (formatsData.formats?.length > 0) {
+          setSelectedFormat(formatsData.formats[0].format_id);
+        }
+      }
+
     } catch (error) {
       console.error("Error fetching metadata:", error);
       // Fallback to YouTube thumbnail
@@ -88,6 +101,8 @@ export default function Editor() {
     } else {
       setThumbnailUrl(null);
       setMetadata({});
+      setFormats([]);
+      setSelectedFormat('');
       setIsMetadataLoading(false);
     }
   }, [url]);
@@ -131,7 +146,7 @@ export default function Editor() {
       const clipKickoff = await fetch("/api/clip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, startTime, endTime, cropRatio, subtitles: addSubs }),
+        body: JSON.stringify({ url, startTime, endTime, cropRatio, subtitles: addSubs, formatId: selectedFormat }),
       });
 
       if (!clipKickoff.ok) {
@@ -396,15 +411,45 @@ export default function Editor() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
-              <Switch
-                id="subtitles-switch"
-                checked={addSubs}
-                onCheckedChange={setAddSubs}
-              />
-              <Label htmlFor="subtitles-switch">
-                Add subtitles (English only)
-              </Label>
+            <div className="flex flex-col sm:flex-row gap-4 w-full">
+              <div className="flex flex-col gap-2 flex-1">
+                <Label htmlFor="quality">Quality</Label>
+                <select
+                  id="quality"
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value)}
+                  className="bg-transparent border rounded-md p-2 h-10 flex items-center appearance-none bg-no-repeat bg-right bg-[length:16px] pr-8"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: 'right 8px center'
+                  }}
+                  disabled={formats.length === 0}
+                >
+                  {formats.length === 0 ? (
+                    <option value="">Loading formats...</option>
+                  ) : (
+                    formats.map((format) => (
+                      <option key={format.format_id} value={format.format_id}>
+                        {format.label}
+                      </option>
+                    ))  
+                  )}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2 flex-1">
+                <Label htmlFor="subtitles-switch">Subtitles</Label>
+                <div className="flex items-center space-x-2 h-10">
+                  <Switch
+                    id="subtitles-switch"
+                    checked={addSubs}
+                    onCheckedChange={setAddSubs}
+                  />
+                  <Label htmlFor="subtitles-switch" className="text-sm text-muted-foreground">
+                    English only
+                  </Label>
+                </div>
+              </div>
             </div>
           </div>
         </motion.form>
