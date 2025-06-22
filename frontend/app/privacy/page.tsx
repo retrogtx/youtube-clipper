@@ -52,8 +52,7 @@ export default function Privacy() {
           <h2 className="text-xl font-semibold mb-3">5. Data Retention</h2>
           <p>
             Clip data and account details are retained for as long as your
-            account is active. You can permanently delete your account—and all
-            associated data—at any time in your profile settings.
+            account is active. Mail us to delete your account.
           </p>
         </div>
 
