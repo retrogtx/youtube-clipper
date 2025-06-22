@@ -117,11 +117,16 @@ app.post("/api/clip", async (req, res) => {
 
   (async () => {
     let finalJobStatus: { [key: string]: any } = {};
+    let tempCookiesPath: string | null = null;
     try {
       const section = `*${startTime}-${endTime}`;
+      
       const prodCookiesPath = '/etc/secrets/cookies.txt';
-      const localCookiesPath = path.join(__dirname, "cookies.txt");
-      const cookiesFilePath = fs.existsSync(prodCookiesPath) ? prodCookiesPath : localCookiesPath;
+      if (fs.existsSync(prodCookiesPath)) {
+        const cookiesContent = fs.readFileSync(prodCookiesPath, 'utf-8');
+        tempCookiesPath = path.join(uploadsDir, `cookies-${id}.txt`);
+        fs.writeFileSync(tempCookiesPath, cookiesContent);
+      }
 
       const ytArgs = [
         url,
@@ -156,7 +161,14 @@ app.post("/api/clip", async (req, res) => {
           "vtt"
         );
       }
-      if (fs.existsSync(cookiesFilePath)) ytArgs.push("--cookies", cookiesFilePath);
+      if (tempCookiesPath) {
+        ytArgs.push("--cookies", tempCookiesPath);
+      } else {
+        const localCookiesPath = path.join(__dirname, "cookies.txt");
+        if (fs.existsSync(localCookiesPath)) {
+          ytArgs.push("--cookies", localCookiesPath)
+        }
+      }
 
       console.log(`[job ${id}] starting yt-dlp`);
       const yt = spawn(path.resolve(__dirname, '../bin/yt-dlp'), ytArgs);
@@ -283,6 +295,9 @@ app.post("/api/clip", async (req, res) => {
         error: message,
       };
     } finally {
+      if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+        fs.unlinkSync(tempCookiesPath);
+      }
       const { error: updateError } = await supabase
         .from('jobs')
         .update(finalJobStatus)
@@ -343,11 +358,17 @@ app.get("/api/formats", async (req, res) => {
     return res.status(400).json({ error: "url is required" });
   }
 
+  let tempCookiesPath: string | null = null;
   try {
     const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
+    
     const prodCookiesPath = '/etc/secrets/cookies.txt';
-    const localCookiesPath = path.join(__dirname, "cookies.txt");
-    const cookiesFilePath = fs.existsSync(prodCookiesPath) ? prodCookiesPath : localCookiesPath;
+    if (fs.existsSync(prodCookiesPath)) {
+      const cookiesContent = fs.readFileSync(prodCookiesPath, 'utf-8');
+      const jobId = createJobId();
+      tempCookiesPath = path.join(uploadsDir, `cookies-${jobId}.txt`);
+      fs.writeFileSync(tempCookiesPath, cookiesContent);
+    }
     
     const ytArgs = [
       '-j', 
@@ -360,8 +381,13 @@ app.get("/api/formats", async (req, res) => {
       url as string
     ];
     
-    if (fs.existsSync(cookiesFilePath)) {
-      ytArgs.splice(-1, 0, '--cookies', cookiesFilePath);
+    if (tempCookiesPath) {
+      ytArgs.push("--cookies", tempCookiesPath);
+    } else {
+      const localCookiesPath = path.join(__dirname, "cookies.txt");
+      if (fs.existsSync(localCookiesPath)) {
+        ytArgs.push("--cookies", localCookiesPath)
+      }
     }
     
     console.log(`[formats] fetching formats for URL: ${url}`);
@@ -385,6 +411,9 @@ app.get("/api/formats", async (req, res) => {
 
     yt.on('close', (code, signal) => {
       clearTimeout(timeout);
+      if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+        fs.unlinkSync(tempCookiesPath);
+      }
       if (signal === 'SIGKILL') {
         console.error(`[formats] yt-dlp process timed out after 30 seconds`);
         return res.status(500).json({ error: 'Request timed out - video may be too long or unavailable' });
@@ -443,11 +472,17 @@ app.get("/api/formats", async (req, res) => {
 
     yt.on('error', (err) => {
         clearTimeout(timeout);
+        if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+          fs.unlinkSync(tempCookiesPath);
+        }
         console.error('[formats] yt-dlp spawn error', err);
         return res.status(500).json({ error: 'Failed to start yt-dlp process' });
     });
 
   } catch (err: unknown) {
+    if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+      fs.unlinkSync(tempCookiesPath);
+    }
     console.error(`[formats] failed`, err);
     const message = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: message });
