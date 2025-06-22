@@ -146,7 +146,7 @@ app.post("/api/clip", async (req, res) => {
       if (formatId) {
         ytArgs.push("-f", formatId);
       } else {
-        ytArgs.push("-f", "bv[ext=mp4][vcodec^=avc1][height<=2160][fps<=60]+ba[ext=m4a][acodec^=mp4a]/best[ext=mp4][vcodec^=avc1]");
+        ytArgs.push("-f", "bv[ext=mp4][vcodec^=avc1][height<=?1080][fps<=?60]+ba[ext=m4a]/best[ext=mp4][vcodec^=avc1][height<=?1080]");
       }
       ytArgs.push(
         "--download-sections",
@@ -208,6 +208,8 @@ app.post("/api/clip", async (req, res) => {
         const ffmpegArgs = [
           '-y',
           '-i', outputPath,
+          '-ss', startTime,  // Start time for trimming
+          '-to', endTime,    // End time for trimming
         ];
 
         if (subtitles && subtitlesExist) {
@@ -228,17 +230,29 @@ app.post("/api/clip", async (req, res) => {
 
         ffmpegArgs.push(
           '-movflags', '+faststart',
+          '-preset', 'ultrafast',  // Faster encoding, less memory
+          '-crf', '28',           // Lower quality but smaller file
+          '-maxrate', '2M',       // Limit bitrate
+          '-bufsize', '4M',       // Limit buffer size
           fastPath
         );
 
         console.log(`[job ${id}] running ffmpeg`, ffmpegArgs.join(' '));
         const ff = spawn('ffmpeg', ffmpegArgs);
+        
+        // Add timeout for ffmpeg process
+        const ffmpegTimeout = setTimeout(() => {
+          console.log(`[job ${id}] ffmpeg timeout reached, killing process`);
+          ff.kill('SIGKILL');
+        }, 300000); // 5 minutes timeout
+        
         ff.stderr.on('data', d => console.error(`[job ${id}] ffmpeg`, d.toString()));
         ff.on('close', (code, signal) => {
+          clearTimeout(ffmpegTimeout);
           if (code === 0) {
             resolve();
           } else if (code === null) {
-            reject(new Error(`ffmpeg process was killed by signal: ${signal || 'unknown'}`));
+            reject(new Error(`ffmpeg process was killed by signal: ${signal || 'unknown'} - likely due to memory limits on Render`));
           } else {
             reject(new Error(`ffmpeg exited with code ${code}`));
           }
@@ -248,7 +262,7 @@ app.post("/api/clip", async (req, res) => {
 
       await fs.promises.unlink(outputPath).catch(()=>{});
       await fs.promises.rename(fastPath, outputPath);
-      
+
       if (subtitlesExist) {
         await fs.promises.unlink(subPath).catch(() => {});
       }
@@ -405,9 +419,15 @@ app.get("/api/formats", async (req, res) => {
       try {
         const info = JSON.parse(jsonData);
         
-        // Get video-only formats (higher quality) and combined formats
+        const MAX_PIXELS = 1920 * 1080;
+        
         const videoFormats = info.formats
-          .filter((f: any) => f.vcodec !== 'none' && f.height && (f.ext === 'mp4' || f.ext === 'webm'))
+          .filter((f: any) => 
+            f.vcodec !== 'none' && 
+            f.height && f.width &&
+            (f.width * f.height <= MAX_PIXELS) && 
+            (f.ext === 'mp4' || f.ext === 'webm')
+          )
           .map((f: any) => ({
             format_id: f.format_id,
             label: `${f.height}p${f.fps > 30 ? f.fps : ''}`,
