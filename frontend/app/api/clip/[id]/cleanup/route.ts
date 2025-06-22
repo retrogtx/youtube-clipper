@@ -38,7 +38,7 @@ export async function DELETE(
     console.log(`[cleanup] Bucket ${bucketName} found and accessible`);
     
     // Get job info from backend to find the storage path
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3001';
     const statusRes = await fetch(`${backendUrl}/api/clip/${id}`);
     
     if (!statusRes.ok) {

@@ -8,7 +8,7 @@ export async function GET(
     const { id } = await params;
     
     // Step 1: Get the job status and public URL from backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3001';
     const statusRes = await fetch(`${backendUrl}/api/clip/${id}`);
     
     if (!statusRes.ok) {
