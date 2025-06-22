@@ -159,10 +159,16 @@ app.post("/api/clip", async (req, res) => {
           console.log(`[job ${id}] burning subtitles from ${subPath}`);
           ffmpegArgs.push(
             '-vf', `subtitles=${subPath}`,
-            '-c:a', 'copy'
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-b:a', '128k'
           );
         } else {
-          ffmpegArgs.push('-c', 'copy');
+          ffmpegArgs.push(
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '128k'
+          );
         }
 
         ffmpegArgs.push(
