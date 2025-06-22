@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  // Add userId from session to the body
+  body.userId = session.user.id;
+
   // Forward to backend – expect 202 w/ { id }
   const backendRes = await fetch(`${process.env.BACKEND_API_URL}/api/clip`, {
     method: "POST",

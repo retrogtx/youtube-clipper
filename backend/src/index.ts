@@ -52,40 +52,6 @@ interface Job {
   publicUrl?: string;
   error?: string;
 }
-const jobs = new Map<string, Job>();
-
-// Persistent job management
-function saveJob(job: Job) {
-  const jobFile = path.join(jobsDir, `${job.id}.json`);
-  fs.writeFileSync(jobFile, JSON.stringify(job, null, 2));
-  jobs.set(job.id, job);
-}
-
-function loadJob(id: string): Job | null {
-  try {
-    const jobFile = path.join(jobsDir, `${id}.json`);
-    if (fs.existsSync(jobFile)) {
-      const jobData = JSON.parse(fs.readFileSync(jobFile, 'utf-8'));
-      jobs.set(id, jobData);
-      return jobData;
-    }
-  } catch (err) {
-    console.error(`Error loading job ${id}:`, err);
-  }
-  return null;
-}
-
-function deleteJob(id: string) {
-  const jobFile = path.join(jobsDir, `${id}.json`);
-  try {
-    if (fs.existsSync(jobFile)) {
-      fs.unlinkSync(jobFile);
-    }
-  } catch (err) {
-    console.error(`Error deleting job file ${id}:`, err);
-  }
-  jobs.delete(id);
-}
 
 function createJobId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -124,18 +90,33 @@ async function adjustSubtitleTimestamps(inputPath: string, outputPath: string, s
 }
 
 app.post("/api/clip", async (req, res) => {
-  const { url, startTime, endTime, subtitles, formatId } = req.body || {};
-  if (!url || !startTime || !endTime) {
-    return res.status(400).json({ error: "url, startTime, and endTime are required" });
+  const { url, startTime, endTime, subtitles, formatId, userId } = req.body || {};
+  if (!url || !startTime || !endTime || !userId) {
+    return res.status(400).json({ error: "url, startTime, endTime and userId are required" });
   }
 
   const id = createJobId();
   const outputPath = path.join(uploadsDir, `clip-${id}.mp4`);
-  const job: Job = { id, status: 'processing', filePath: outputPath };
-  saveJob(job);
-  console.log(`[job ${id}] created and saved to persistent storage. Total jobs:`, jobs.size);
+  
+  const initialJobData = {
+    id,
+    user_id: userId,
+    status: 'processing',
+  };
+
+  const { error: insertError } = await supabase
+    .from('jobs')
+    .insert([initialJobData]);
+
+  if (insertError) {
+    console.error(`[job ${id}] failed to create job in database`, insertError);
+    return res.status(500).json({ error: 'Failed to create job' });
+  }
+
+  console.log(`[job ${id}] created and saved to database.`);
 
   (async () => {
+    let finalJobStatus: { [key: string]: any } = {};
     try {
       const section = `*${startTime}-${endTime}`;
       const cookiesFilePath = path.join(__dirname, "../src/cookies.txt");
@@ -285,18 +266,29 @@ app.post("/api/clip", async (req, res) => {
       // Remove local file after upload
       await fs.promises.unlink(outputPath).catch(() => {});
 
-      job.storagePath = objectPath;
-      job.publicUrl = pub.publicUrl;
-
-      job.status = 'ready';
-      saveJob(job);
-      console.log(`[job ${id}] ready - storagePath: ${job.storagePath}, publicUrl: ${job.publicUrl}`);
+      finalJobStatus = {
+        storage_path: objectPath,
+        public_url: pub.publicUrl,
+        status: 'ready',
+      };
+      
+      console.log(`[job ${id}] ready - storagePath: ${finalJobStatus.storage_path}, publicUrl: ${finalJobStatus.public_url}`);
     } catch (err: unknown) {
       console.error(`[job ${id}] failed`, err);
-      job.status = 'error';
       const message = err instanceof Error ? err.message : String(err);
-      job.error = message;
-      saveJob(job);
+      finalJobStatus = {
+        status: 'error',
+        error: message,
+      };
+    } finally {
+      const { error: updateError } = await supabase
+        .from('jobs')
+        .update(finalJobStatus)
+        .eq('id', id);
+
+      if (updateError) {
+        console.error(`[job ${id}] failed to update final job status in database`, updateError);
+      }
     }
   })();
 
@@ -305,58 +297,42 @@ app.post("/api/clip", async (req, res) => {
 
 app.get('/api/clip/:id', async (req, res) => {
   const { id } = req.params;
-  const { download } = req.query;
-  let job = jobs.get(id);
   
-  // If not in memory, try to load from persistent storage
-  if (!job) {
-    job = loadJob(id) || undefined;
-  }
-  
-  if (!job) {
-    console.log(`[job ${id}] not found in memory or persistent storage. Current jobs:`, Array.from(jobs.keys()));
+  const { data: job, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !job) {
+    console.log(`[job ${id}] not found in database. Error:`, error?.message);
     return res.status(404).json({ error: 'job not found'});
   }
-
-  if (download === '1') {
-    // Frontend should handle download directly from Supabase URL
-    return res.status(400).json({ 
-      error: 'Use the public URL directly. Backend only provides the URL, frontend handles download and cleanup.' 
-    });
-  }
-
+  
   return res.json({ 
     status: job.status, 
     error: job.error, 
-    url: job.publicUrl,
-    storagePath: job.storagePath 
+    url: job.public_url,
+    storagePath: job.storage_path 
   });
 });
 
 // Cleanup endpoint for frontend to delete files after download
 app.delete('/api/clip/:id/cleanup', async (req, res) => {
   const { id } = req.params;
-  let job = jobs.get(id);
-  
-  // If not in memory, try to load from persistent storage
-  if (!job) {
-    job = loadJob(id) || undefined;
-  }
-  
-  if (!job) {
-    return res.status(404).json({ error: 'job not found' });
-  }
 
-  try {
-    // Only clean up job metadata (Supabase cleanup is handled by frontend)
-    deleteJob(id);
-    console.log(`[job ${id}] job metadata cleaned up successfully`);
-    
-    return res.json({ success: true });
-  } catch (err) {
-    console.error(`[job ${id}] job cleanup error:`, err);
+  const { error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error(`[job ${id}] job cleanup error:`, error);
     return res.status(500).json({ error: 'Job cleanup failed' });
   }
+
+  console.log(`[job ${id}] job metadata cleaned up successfully from database`);
+  return res.json({ success: true });
 });
 
 app.get("/api/formats", async (req, res) => {
@@ -513,25 +489,19 @@ app.get("/api/test-supabase", async (req, res) => {
 });
 
 // Clean up old job files on startup
-function cleanupOldJobs() {
-  try {
-    const jobFiles = fs.readdirSync(jobsDir);
-    const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
-    
-    jobFiles.forEach(file => {
-      try {
-        const filePath = path.join(jobsDir, file);
-        const stats = fs.statSync(filePath);
-        if (stats.mtime.getTime() < cutoffTime) {
-          fs.unlinkSync(filePath);
-          console.log(`Cleaned up old job file: ${file}`);
-        }
-      } catch (err) {
-        console.error(`Error cleaning up job file ${file}:`, err);
-      }
-    });
-  } catch (err) {
-    console.error('Error during job cleanup:', err);
+async function cleanupOldJobs() {
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  
+  console.log('Cleaning up old jobs from database...');
+  const { data, error } = await supabase
+    .from('jobs')
+    .delete()
+    .lt('created_at', twentyFourHoursAgo);
+  
+  if (error) {
+    console.error('Error during database job cleanup:', error);
+  } else if (data) {
+    console.log(`Cleaned up old jobs from database.`);
   }
 }
 

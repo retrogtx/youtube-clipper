@@ -146,7 +146,15 @@ export default function Editor() {
       const clipKickoff = await fetch("/api/clip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, startTime, endTime, cropRatio, subtitles: addSubs, formatId: selectedFormat }),
+        body: JSON.stringify({
+          url,
+          startTime,
+          endTime,
+          cropRatio,
+          subtitles: addSubs,
+          formatId: selectedFormat,
+          userId: session?.user?.id,
+        }),
       });
 
       if (!clipKickoff.ok) {
