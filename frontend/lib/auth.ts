@@ -49,7 +49,7 @@ export const auth = betterAuth({
     // Origins allowed to make authenticated requests (for CORS and CSRF protection)
     trustedOrigins: (
       process.env.TRUSTED_ORIGINS ||
-      `${process.env.NEXT_PUBLIC_APP_URL},https://www.clippa.in,https://clippa.in,https://youtube-clipper-pi.vercel.app` // Temprory Fix.
+      `${process.env.NEXT_PUBLIC_APP_URL},https://www.clippa.in,https://clippa.in`
     )
       .split(/,\s*/)
       .filter(Boolean),
