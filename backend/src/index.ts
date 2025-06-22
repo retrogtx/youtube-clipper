@@ -84,6 +84,7 @@ app.post("/api/clip", async (req, res) => {
   const outputPath = path.join(uploadsDir, `clip-${id}.mp4`);
   const job: Job = { id, status: 'processing', filePath: outputPath };
   jobs.set(id, job);
+  console.log(`[job ${id}] created and added to jobs map. Total jobs:`, jobs.size);
 
   (async () => {
     try {
@@ -130,9 +131,14 @@ app.post("/api/clip", async (req, res) => {
       yt.stderr.on('data', d => console.error(`[job ${id}]`, d.toString()));
 
       await new Promise<void>((resolve, reject) => {
-        yt.on('close', code => {
-          if (code === 0) resolve();
-          else reject(new Error(`yt-dlp exited ${code}`));
+        yt.on('close', (code, signal) => {
+          if (code === 0) {
+            resolve();
+          } else if (code === null) {
+            reject(new Error(`yt-dlp process was killed by signal: ${signal || 'unknown'}`));
+          } else {
+            reject(new Error(`yt-dlp exited with code ${code}`));
+          }
         });
         yt.on('error', reject);
       });
@@ -179,7 +185,15 @@ app.post("/api/clip", async (req, res) => {
         console.log(`[job ${id}] running ffmpeg`, ffmpegArgs.join(' '));
         const ff = spawn('ffmpeg', ffmpegArgs);
         ff.stderr.on('data', d => console.error(`[job ${id}] ffmpeg`, d.toString()));
-        ff.on('close', c => c === 0 ? resolve() : reject(new Error(`ffmpeg exited ${c}`)));
+        ff.on('close', (code, signal) => {
+          if (code === 0) {
+            resolve();
+          } else if (code === null) {
+            reject(new Error(`ffmpeg process was killed by signal: ${signal || 'unknown'}`));
+          } else {
+            reject(new Error(`ffmpeg exited with code ${code}`));
+          }
+        });
         ff.on('error', reject);
       });
 
@@ -207,7 +221,10 @@ app.get('/api/clip/:id', async (req, res) => {
   const { id } = req.params;
   const { download } = req.query;
   const job = jobs.get(id);
-  if (!job) return res.status(404).json({ error: 'job not found'});
+  if (!job) {
+    console.log(`[job ${id}] not found in jobs map. Current jobs:`, Array.from(jobs.keys()));
+    return res.status(404).json({ error: 'job not found'});
+  }
 
   if (download === '1') {
     if (job.status !== 'ready' || !job.filePath) return res.status(409).json({ status: job.status });
@@ -215,6 +232,7 @@ app.get('/api/clip/:id', async (req, res) => {
       if (err) console.error(`[job ${id}] send error`, err);
       try { if (job.filePath) await unlinkAsync(job.filePath); } catch {}
       jobs.delete(id);
+      console.log(`[job ${id}] completed and removed from jobs map. Total jobs:`, jobs.size);
     });
   }
 
