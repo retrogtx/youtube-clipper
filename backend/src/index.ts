@@ -30,6 +30,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
+const jobsDir = path.join(__dirname, "../jobs");
+if (!fs.existsSync(jobsDir)) {
+  fs.mkdirSync(jobsDir);
+}
+
 interface Job {
   id: string;
   status: 'processing' | 'ready' | 'error';
@@ -37,6 +42,39 @@ interface Job {
   error?: string;
 }
 const jobs = new Map<string, Job>();
+
+// Persistent job management
+function saveJob(job: Job) {
+  const jobFile = path.join(jobsDir, `${job.id}.json`);
+  fs.writeFileSync(jobFile, JSON.stringify(job, null, 2));
+  jobs.set(job.id, job);
+}
+
+function loadJob(id: string): Job | null {
+  try {
+    const jobFile = path.join(jobsDir, `${id}.json`);
+    if (fs.existsSync(jobFile)) {
+      const jobData = JSON.parse(fs.readFileSync(jobFile, 'utf-8'));
+      jobs.set(id, jobData);
+      return jobData;
+    }
+  } catch (err) {
+    console.error(`Error loading job ${id}:`, err);
+  }
+  return null;
+}
+
+function deleteJob(id: string) {
+  const jobFile = path.join(jobsDir, `${id}.json`);
+  try {
+    if (fs.existsSync(jobFile)) {
+      fs.unlinkSync(jobFile);
+    }
+  } catch (err) {
+    console.error(`Error deleting job file ${id}:`, err);
+  }
+  jobs.delete(id);
+}
 
 function createJobId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -83,8 +121,8 @@ app.post("/api/clip", async (req, res) => {
   const id = createJobId();
   const outputPath = path.join(uploadsDir, `clip-${id}.mp4`);
   const job: Job = { id, status: 'processing', filePath: outputPath };
-  jobs.set(id, job);
-  console.log(`[job ${id}] created and added to jobs map. Total jobs:`, jobs.size);
+  saveJob(job);
+  console.log(`[job ${id}] created and saved to persistent storage. Total jobs:`, jobs.size);
 
   (async () => {
     try {
@@ -205,12 +243,14 @@ app.post("/api/clip", async (req, res) => {
       }
 
       job.status = 'ready';
+      saveJob(job);
       console.log(`[job ${id}] ready`);
     } catch (err: unknown) {
       console.error(`[job ${id}] failed`, err);
       job.status = 'error';
       const message = err instanceof Error ? err.message : String(err);
       job.error = message;
+      saveJob(job);
     }
   })();
 
@@ -220,9 +260,15 @@ app.post("/api/clip", async (req, res) => {
 app.get('/api/clip/:id', async (req, res) => {
   const { id } = req.params;
   const { download } = req.query;
-  const job = jobs.get(id);
+  let job = jobs.get(id);
+  
+  // If not in memory, try to load from persistent storage
   if (!job) {
-    console.log(`[job ${id}] not found in jobs map. Current jobs:`, Array.from(jobs.keys()));
+    job = loadJob(id) || undefined;
+  }
+  
+  if (!job) {
+    console.log(`[job ${id}] not found in memory or persistent storage. Current jobs:`, Array.from(jobs.keys()));
     return res.status(404).json({ error: 'job not found'});
   }
 
@@ -231,8 +277,8 @@ app.get('/api/clip/:id', async (req, res) => {
     return res.download(job.filePath, 'clip.mp4', async err => {
       if (err) console.error(`[job ${id}] send error`, err);
       try { if (job.filePath) await unlinkAsync(job.filePath); } catch {}
-      jobs.delete(id);
-      console.log(`[job ${id}] completed and removed from jobs map. Total jobs:`, jobs.size);
+      deleteJob(id);
+      console.log(`[job ${id}] completed and removed from persistent storage. Total jobs:`, jobs.size);
     });
   }
 
@@ -264,7 +310,14 @@ app.get("/api/formats", async (req, res) => {
       ytArgs.splice(-1, 0, '--cookies', cookiesFilePath);
     }
     
+    console.log(`[formats] fetching formats for URL: ${url}`);
     const yt = spawn(ytDlpPath, ytArgs);
+    
+    // Add timeout for yt-dlp process
+    const timeout = setTimeout(() => {
+      console.log(`[formats] timeout reached, killing yt-dlp process`);
+      yt.kill('SIGKILL');
+    }, 30000); // 30 second timeout
     
     let jsonData = '';
     yt.stdout.on('data', (data) => {
@@ -276,7 +329,12 @@ app.get("/api/formats", async (req, res) => {
         errorData += data.toString();
     });
 
-    yt.on('close', (code) => {
+    yt.on('close', (code, signal) => {
+      clearTimeout(timeout);
+      if (signal === 'SIGKILL') {
+        console.error(`[formats] yt-dlp process timed out after 30 seconds`);
+        return res.status(500).json({ error: 'Request timed out - video may be too long or unavailable' });
+      }
       if (code !== 0) {
         console.error(`[formats] yt-dlp exited with code ${code}`, errorData);
         return res.status(500).json({ error: `yt-dlp exited with code ${code}` });
@@ -324,6 +382,7 @@ app.get("/api/formats", async (req, res) => {
     });
 
     yt.on('error', (err) => {
+        clearTimeout(timeout);
         console.error('[formats] yt-dlp spawn error', err);
         return res.status(500).json({ error: 'Failed to start yt-dlp process' });
     });
@@ -337,6 +396,32 @@ app.get("/api/formats", async (req, res) => {
 
 app.get("/", (req, res) => res.send("Server is alive!"));
 
+// Clean up old job files on startup
+function cleanupOldJobs() {
+  try {
+    const jobFiles = fs.readdirSync(jobsDir);
+    const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+    
+    jobFiles.forEach(file => {
+      try {
+        const filePath = path.join(jobsDir, file);
+        const stats = fs.statSync(filePath);
+        if (stats.mtime.getTime() < cutoffTime) {
+          fs.unlinkSync(filePath);
+          console.log(`Cleaned up old job file: ${file}`);
+        }
+      } catch (err) {
+        console.error(`Error cleaning up job file ${file}:`, err);
+      }
+    });
+  } catch (err) {
+    console.error('Error during job cleanup:', err);
+  }
+}
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`CORS origin: ${allowedOrigin}`);
+  cleanupOldJobs();
 });
