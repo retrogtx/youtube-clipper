@@ -119,7 +119,9 @@ app.post("/api/clip", async (req, res) => {
     let finalJobStatus: { [key: string]: any } = {};
     try {
       const section = `*${startTime}-${endTime}`;
-      const cookiesFilePath = path.join(__dirname, "../src/cookies.txt");
+      const prodCookiesPath = '/etc/secrets/cookies.txt';
+      const localCookiesPath = path.join(__dirname, "cookies.txt");
+      const cookiesFilePath = fs.existsSync(prodCookiesPath) ? prodCookiesPath : localCookiesPath;
 
       const ytArgs = [
         url,
@@ -343,7 +345,9 @@ app.get("/api/formats", async (req, res) => {
 
   try {
     const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
-    const cookiesFilePath = path.join(__dirname, "../src/cookies.txt");
+    const prodCookiesPath = '/etc/secrets/cookies.txt';
+    const localCookiesPath = path.join(__dirname, "cookies.txt");
+    const cookiesFilePath = fs.existsSync(prodCookiesPath) ? prodCookiesPath : localCookiesPath;
     
     const ytArgs = [
       '-j', 
