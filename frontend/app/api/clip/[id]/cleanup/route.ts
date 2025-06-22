@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
@@ -72,7 +72,7 @@ export async function DELETE(
     
     // Verify the file was actually deleted
     try {
-      const { data: verifyData, error: verifyError } = await supabase.storage
+      const { data: verifyData } = await supabase.storage
         .from(bucketName)
         .list('', {
           search: jobData.storagePath
