@@ -208,8 +208,6 @@ app.post("/api/clip", async (req, res) => {
         const ffmpegArgs = [
           '-y',
           '-i', outputPath,
-          '-ss', startTime,  // Start time for trimming
-          '-to', endTime,    // End time for trimming
         ];
 
         if (subtitles && subtitlesExist) {
@@ -222,7 +220,7 @@ app.post("/api/clip", async (req, res) => {
           );
         } else {
           ffmpegArgs.push(
-            '-c:v', 'copy',
+            '-c:v', 'libx264', // Re-encode to ensure compatibility
             '-c:a', 'aac',
             '-b:a', '128k'
           );
