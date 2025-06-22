@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import { GradientBackground } from "@/components/GradientBackground";
+import { Analytics } from "@vercel/analytics/next"
 
 const font = Host_Grotesk({
   subsets: ["latin"],
@@ -76,6 +77,7 @@ export default function RootLayout({
         >
           <GradientBackground />
           {children}
+          <Analytics />
           <Toaster />
         </ThemeProvider>
       </body>
