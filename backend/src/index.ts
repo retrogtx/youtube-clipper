@@ -57,6 +57,16 @@ function createJobId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function detectPlatform(url: string): 'youtube' | 'instagram' | 'unknown' {
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return 'youtube';
+  }
+  if (url.includes('instagram.com')) {
+    return 'instagram';
+  }
+  return 'unknown';
+}
+
 function timeToSeconds(timeStr: string): number {
   const parts = timeStr.split(':');
   return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
@@ -95,6 +105,11 @@ app.post("/api/clip", async (req, res) => {
     return res.status(400).json({ error: "url, startTime, endTime and userId are required" });
   }
 
+  const platform = detectPlatform(url);
+  if (platform === 'unknown') {
+    return res.status(400).json({ error: "Unsupported platform. Only YouTube and Instagram are supported." });
+  }
+
   const id = createJobId();
   const outputPath = path.join(uploadsDir, `clip-${id}.mp4`);
   
@@ -131,10 +146,21 @@ app.post("/api/clip", async (req, res) => {
       const ytArgs = [
         url,
       ];
-      if (formatId) {
-        ytArgs.push("-f", formatId);
+      
+      if (platform === 'instagram') {
+        // Instagram-specific format selection
+        if (formatId) {
+          ytArgs.push("-f", formatId);
+        } else {
+          ytArgs.push("-f", "best[ext=mp4][height<=?1080]/best");
+        }
       } else {
-        ytArgs.push("-f", "bv[ext=mp4][vcodec^=avc1][height<=?1080][fps<=?60]+ba[ext=m4a]/best[ext=mp4][vcodec^=avc1][height<=?1080]");
+        // YouTube format selection
+        if (formatId) {
+          ytArgs.push("-f", formatId);
+        } else {
+          ytArgs.push("-f", "bv[ext=mp4][vcodec^=avc1][height<=?1080][fps<=?60]+ba[ext=m4a]/best[ext=mp4][vcodec^=avc1][height<=?1080]");
+        }
       }
       ytArgs.push(
         "--download-sections",
@@ -151,6 +177,17 @@ app.post("/api/clip", async (req, res) => {
         "user-agent:Mozilla/5.0",
         "--verbose"
       );
+      
+      // Platform-specific headers and options
+      if (platform === 'instagram') {
+        ytArgs.push(
+          "--add-header",
+          "referer:instagram.com",
+          "--add-header",
+          "user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        );
+      }
+      
       if (subtitles) {
         ytArgs.push(
           "--write-subs",
@@ -358,6 +395,11 @@ app.get("/api/formats", async (req, res) => {
     return res.status(400).json({ error: "url is required" });
   }
 
+  const platform = detectPlatform(url);
+  if (platform === 'unknown') {
+    return res.status(400).json({ error: "Unsupported platform. Only YouTube and Instagram are supported." });
+  }
+
   let tempCookiesPath: string | null = null;
   try {
     const ytDlpPath = path.resolve(__dirname, '../bin/yt-dlp');
@@ -428,21 +470,42 @@ app.get("/api/formats", async (req, res) => {
         
         const MAX_PIXELS = 1920 * 1080;
         
-        const videoFormats = info.formats
-          .filter((f: any) => 
-            f.vcodec !== 'none' && 
-            f.height && f.width &&
-            (f.width * f.height <= MAX_PIXELS) && 
-            (f.ext === 'mp4' || f.ext === 'webm')
-          )
-          .map((f: any) => ({
-            format_id: f.format_id,
-            label: `${f.height}p${f.fps > 30 ? f.fps : ''}`,
-            height: f.height,
-            hasAudio: f.acodec !== 'none',
-            ext: f.ext
-          }))
-          .sort((a: any, b: any) => b.height - a.height);
+        let videoFormats = [];
+        
+        if (platform === 'instagram') {
+          // Instagram typically has simpler format structure
+          videoFormats = info.formats
+            .filter((f: any) => 
+              f.vcodec !== 'none' && 
+              f.height && 
+              (f.ext === 'mp4' || f.ext === 'webm')
+            )
+            .map((f: any) => ({
+              format_id: f.format_id,
+              label: f.height ? `${f.height}p` : 'Default',
+              height: f.height || 720,
+              hasAudio: f.acodec !== 'none',
+              ext: f.ext
+            }))
+            .sort((a: any, b: any) => b.height - a.height);
+        } else {
+          // YouTube format handling
+          videoFormats = info.formats
+            .filter((f: any) => 
+              f.vcodec !== 'none' && 
+              f.height && f.width &&
+              (f.width * f.height <= MAX_PIXELS) && 
+              (f.ext === 'mp4' || f.ext === 'webm')
+            )
+            .map((f: any) => ({
+              format_id: f.format_id,
+              label: `${f.height}p${f.fps > 30 ? f.fps : ''}`,
+              height: f.height,
+              hasAudio: f.acodec !== 'none',
+              ext: f.ext
+            }))
+            .sort((a: any, b: any) => b.height - a.height);
+        }
         
         // Remove duplicates based on height and keep the best format for each resolution
         const uniqueFormats = videoFormats.reduce((acc: any[], current: any) => {
@@ -548,5 +611,5 @@ app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`CORS origin: ${allowedOrigin}`);
-  cleanupOldJobs();
+  cleanupOldJobs(); 
 });
