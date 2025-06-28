@@ -1,6 +1,6 @@
 "use client";
 import { authClient } from "@/lib/auth-client"; // import the auth client
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +25,13 @@ export default function Editor() {
   const [loading, setLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailError, setThumbnailError] = useState(false);
   const [metadata, setMetadata] = useState<{
     title?: string;
     description?: string;
     thumbnail?: string;
     duration?: string;
+    uploader?: string;
   }>({});
   const [cropRatio, setCropRatio] = useState<
     "original" | "vertical" | "square"
@@ -40,38 +42,78 @@ export default function Editor() {
   const { data: session } = authClient.useSession();
   const [downloadCount, setDownloadCount] = useState(0);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const getVideoId = (url: string) => {
-    const regExp =
-      /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    return match && match[7].length === 11 ? match[7] : null;
-  };
+  const detectPlatform = useCallback((url: string): 'youtube' | 'instagram' | 'unknown' => {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      return 'youtube';
+    }
+    if (url.includes('instagram.com')) {
+      return 'instagram';
+    }
+    return 'unknown';
+  }, []);
 
-  const fetchVideoMetadata = async (videoId: string | null) => {
+  const getVideoId = useCallback((url: string) => {
+    const platform = detectPlatform(url);
+    
+    if (platform === 'youtube') {
+      const regExp =
+        /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+      const match = url.match(regExp);
+      return match && match[7].length === 11 ? match[7] : null;
+    } else if (platform === 'instagram') {
+      // Extract Instagram post/reel ID from URL
+      const regExp = /instagram\.com\/(p|reel)\/([A-Za-z0-9_-]+)/;
+      const match = url.match(regExp);
+      return match ? match[2] : null;
+    }
+    
+    return null;
+  }, [detectPlatform]);
+
+  const fetchVideoMetadata = useCallback(async (videoId: string | null) => {
     if (!videoId) return;
     setIsMetadataLoading(true);
 
     try {
-      const url = `https://www.youtube.com/watch?v=${videoId}`;
+      const platform = detectPlatform(url);
+      let fetchUrl = '';
+      
+      if (platform === 'youtube') {
+        fetchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      } else if (platform === 'instagram') {
+        fetchUrl = url; 
+      }
+      
+      // yt-dlp metadata endpoint for both platforms for consistent rich metadata
       const metadataResponse = await fetch(
-        `/api/metadata?url=${encodeURIComponent(url)}`
+        `/api/metadata?url=${encodeURIComponent(fetchUrl)}`
       );
       if (!metadataResponse.ok) throw new Error("Failed to fetch video metadata");
       const metadata = await metadataResponse.json();
+
 
       setMetadata({
         title: metadata.title,
         description: metadata.description,
         thumbnail: metadata.thumbnail,
+        duration: metadata.duration,
+        uploader: metadata.uploader,
       });
-      setThumbnailUrl(
-        metadata.image
-          ? metadata.image
-          : `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-      );
+      
+      if (platform === 'youtube') {
+        setThumbnailUrl(
+          metadata.image
+            ? metadata.image
+            : `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+        );
+        setThumbnailError(false);
+      } else if (platform === 'instagram') {
+        setThumbnailUrl(metadata.image || null);
+        setThumbnailError(false);
+      }
 
       // Fetch formats
-      const formatsResponse = await fetch(`/api/formats?url=${encodeURIComponent(url)}`);
+      const formatsResponse = await fetch(`/api/formats?url=${encodeURIComponent(fetchUrl)}`);
       if(formatsResponse.ok) {
         const formatsData = await formatsResponse.json();
         setFormats(formatsData.formats || []);
@@ -82,30 +124,43 @@ export default function Editor() {
 
     } catch (error) {
       console.error("Error fetching metadata:", error);
-      // Fallback to YouTube thumbnail
-      setThumbnailUrl(
-        `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-      );
+      const platform = detectPlatform(url);
+      
+      if (platform === 'youtube') {
+        // Fallback to YouTube thumbnail
+        setThumbnailUrl(
+          `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+        );
+      } else if (platform === 'instagram') {
+        // Set fallback metadata for Instagram
+        setMetadata({
+          title: url.includes('/reel/') ? 'Instagram Reel' : 'Instagram Post',
+          description: 'Instagram content',
+        });
+        setThumbnailUrl(null);
+      }
     } finally {
       setIsMetadataLoading(false);
     }
-  };
+  }, [url, detectPlatform]);
 
   useEffect(() => {
     const videoId = getVideoId(url);
     if (videoId) {
       // Show skeleton immediately by setting thumbnailUrl
       setThumbnailUrl("loading");
+      setThumbnailError(false);
       setIsMetadataLoading(true);
       fetchVideoMetadata(videoId);
     } else {
       setThumbnailUrl(null);
+      setThumbnailError(false);
       setMetadata({});
       setFormats([]);
       setSelectedFormat('');
       setIsMetadataLoading(false);
     }
-  }, [url]);
+  }, [url, fetchVideoMetadata, getVideoId]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -281,29 +336,63 @@ export default function Editor() {
               className="flex flex-col gap-6 h-full w-fit mx-auto"
             >
               <div className="flex flex-col md:flex-row gap-4 bg-muted/50 p-2 rounded-lg md:items-center">
-                {thumbnailUrl && (
-                  <Image
-                    unoptimized
-                    width={1280}
-                    height={720}
-                    src={thumbnailUrl}
-                    alt="Video thumbnail"
-                    className="w-20 object-cover aspect-video rounded-md"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (target.src.includes("maxresdefault")) {
-                        target.src = target.src.replace(
-                          "maxresdefault",
-                          "hqdefault"
-                        );
-                      }
-                    }}
-                  />
+                {thumbnailUrl && !thumbnailError && (
+                  <div className="relative">
+                    <Image
+                      unoptimized
+                      width={1280}
+                      height={720}
+                      src={thumbnailUrl}
+                      alt="Video thumbnail"
+                      className="w-20 object-cover aspect-video rounded-md"
+                      onError={(e) => {
+                        const platform = detectPlatform(url);
+                        const target = e.target as HTMLImageElement;
+                        
+                        if (platform === 'youtube' && target.src.includes("maxresdefault")) {
+                          // For YouTube, try lower quality fallback
+                          target.src = target.src.replace(
+                            "maxresdefault",
+                            "hqdefault"
+                          );
+                        } else {
+                          // For Instagram or failed YouTube fallback, hides the thumbnail
+                          setThumbnailError(true);
+                        }
+                      }}
+                    />
+                    <div className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                      {detectPlatform(url) === 'instagram' ? 'IG' : 'YT'}
+                    </div>
+                  </div>
                 )}
                 <div className="flex flex-col gap-2">
-                  <h3 className="font-medium text-lg line-clamp-1">
-                    {metadata.title}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-lg line-clamp-1">
+                      {metadata.title}
+                    </h3>
+                    {(thumbnailError || !thumbnailUrl) && (
+                      <div className="bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                        {detectPlatform(url) === 'instagram' ? 'IG' : 'YT'}
+                      </div>
+                    )}
+                  </div>
+                  {metadata.uploader && (
+                    <p className="text-sm text-muted-foreground">
+                      by {metadata.uploader}
+                    </p>
+                  )}
+                  {metadata.duration && (
+                    <p className="text-sm text-muted-foreground">
+                      Duration: {(() => {
+                        const totalSeconds = Number(metadata.duration);
+                        const hours = Math.floor(totalSeconds / 3600);
+                        const minutes = Math.floor((totalSeconds % 3600) / 60);
+                        const seconds = Math.floor(totalSeconds % 60);
+                        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                      })()}
+                    </p>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -321,7 +410,7 @@ export default function Editor() {
             <input
               type="text"
               id="url"
-              placeholder="Paste video url here..."
+              placeholder="Paste YouTube or Instagram URL here..."
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               required

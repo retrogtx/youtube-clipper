@@ -48,8 +48,8 @@ export default function App() {
             animate="animate"
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            Clippa is your platform for YT clips. Create bangers from your
-            favorite moments from videos.
+            Clippa is your platform for creating clips from YouTube and Instagram. Create bangers from your
+            favorite moments.
           </motion.p>
         </div>
 
