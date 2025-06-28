@@ -211,22 +211,24 @@ app.post("/api/clip", async (req, res) => {
             '-vf', `subtitles=${subPath}`,
             '-c:v', 'libx264',
             '-c:a', 'aac',
-            '-b:a', '128k'
+            '-b:a', '128k',
+            '-preset', 'ultrafast',  // Faster encoding, less CPU
+            '-crf', '28',            // Lower quality but much smaller file
+            '-maxrate', '2M',        // Limit bitrate
+            '-bufsize', '4M'         // Limit buffer size
           );
         } else {
+          // No subtitles to burn – copy video but transcode audio to AAC to ensure MP4 compatibility
           ffmpegArgs.push(
-            '-c:v', 'libx264', // Re-encode to ensure compatibility
+            '-c:v', 'copy', // keep original video
             '-c:a', 'aac',
             '-b:a', '128k'
           );
         }
 
+        // Move the `faststart` flag and output path outside the conditional so it applies to both modes
         ffmpegArgs.push(
           '-movflags', '+faststart',
-          '-preset', 'ultrafast',  // Faster encoding, less memory
-          '-crf', '28',           // Lower quality but smaller file
-          '-maxrate', '2M',       // Limit bitrate
-          '-bufsize', '4M',       // Limit buffer size
           fastPath
         );
 
@@ -487,6 +489,10 @@ app.get("/api/formats", async (req, res) => {
     const message = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: message });
   }
+});
+
+app.get('/api/ping', (_req, res) => {
+  return res.json({ success: true });
 });
 
 app.get("/", (req, res) => res.send("Server is alive!"));
