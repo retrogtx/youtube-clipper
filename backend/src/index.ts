@@ -262,32 +262,46 @@ app.post("/api/clip", async (req, res) => {
         await fs.promises.unlink(subPath).catch(() => {});
       }
 
-      // ---- Upload processed clip to Supabase ----
-      const objectPath = `clip-${id}.mp4`;
-      console.log(`[job ${id}] uploading to Supabase: ${objectPath}`);
-      const fileBuffer = await fs.promises.readFile(outputPath);
-      const { error: uploadError } = await supabase.storage
-        .from(bucketName)
-        .upload(objectPath, fileBuffer, {
-          contentType: 'video/mp4',
-          upsert: true,
-        });
-      if (uploadError) throw uploadError;
+      // ---- Decide whether to upload to Supabase or serve directly ----
+      const { size: fileSizeBytes } = await fs.promises.stat(outputPath);
+      const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB limit for Supabase free tier
 
-      console.log(`[job ${id}] upload successful, getting public URL`);
-      const { data: pub } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(objectPath);
+      if (fileSizeBytes > MAX_UPLOAD_BYTES) {
+        console.log(`[job ${id}] file size ${(fileSizeBytes / 1024 / 1024).toFixed(2)}MB exceeds limit, skipping Supabase upload and exposing direct download endpoint.`);
 
-      // Remove local file after upload
-      await fs.promises.unlink(outputPath).catch(() => {});
+        finalJobStatus = {
+          storage_path: null,
+          public_url: `${process.env.PUBLIC_BACKEND_URL || 'http://localhost:' + port}/api/clip/${id}/file`,
+          status: 'ready',
+        };
+      } else {
+        // ---- Upload processed clip to Supabase ----
+        const objectPath = `clip-${id}.mp4`;
+        console.log(`[job ${id}] uploading to Supabase: ${objectPath}`);
+        const fileBuffer = await fs.promises.readFile(outputPath);
+        const { error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(objectPath, fileBuffer, {
+            contentType: 'video/mp4',
+            upsert: true,
+          });
+        if (uploadError) throw uploadError;
 
-      finalJobStatus = {
-        storage_path: objectPath,
-        public_url: pub.publicUrl,
-        status: 'ready',
-      };
-      
+        console.log(`[job ${id}] upload successful, getting public URL`);
+        const { data: pub } = supabase.storage
+          .from(bucketName)
+          .getPublicUrl(objectPath);
+
+        // Remove local file after upload
+        await fs.promises.unlink(outputPath).catch(() => {});
+
+        finalJobStatus = {
+          storage_path: objectPath,
+          public_url: pub.publicUrl,
+          status: 'ready',
+        };
+      }
+
       console.log(`[job ${id}] ready - storagePath: ${finalJobStatus.storage_path}, publicUrl: ${finalJobStatus.public_url}`);
     } catch (err: unknown) {
       console.error(`[job ${id}] failed`, err);
@@ -340,18 +354,83 @@ app.get('/api/clip/:id', async (req, res) => {
 app.delete('/api/clip/:id/cleanup', async (req, res) => {
   const { id } = req.params;
 
+  // First, fetch the job so we know whether the file was stored locally or on Supabase
+  const { data: job, error: fetchErr } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchErr && fetchErr.code !== 'PGRST116') { // PGRST116 means not found
+    console.error(`[job ${id}] job fetch error during cleanup:`, fetchErr);
+  }
+
+  // If the job had no storage_path it means the video lives on disk; delete it
+  if (job && !job.storage_path) {
+    const localPath = path.join(uploadsDir, `clip-${id}.mp4`);
+    if (fs.existsSync(localPath)) {
+      try {
+        await fs.promises.unlink(localPath);
+        console.log(`[job ${id}] local file ${localPath} deleted during cleanup`);
+      } catch (fsErr) {
+        console.warn(`[job ${id}] failed to delete local file during cleanup:`, fsErr);
+      }
+    }
+  }
+
+  // Now delete the job row (ignore error if already gone)
   const { error } = await supabase
     .from('jobs')
     .delete()
     .eq('id', id);
 
-  if (error) {
-    console.error(`[job ${id}] job cleanup error:`, error);
+  if (error && error.code !== 'PGRST116') {
+    console.error(`[job ${id}] job cleanup delete error:`, error);
     return res.status(500).json({ error: 'Job cleanup failed' });
   }
 
   console.log(`[job ${id}] job metadata cleaned up successfully from database`);
   return res.json({ success: true });
+});
+
+// Stream or download the generated clip directly from the backend
+app.get('/api/clip/:id/file', (req, res) => {
+  const { id } = req.params;
+  const filePath = path.join(uploadsDir, `clip-${id}.mp4`);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'file not found' });
+  }
+
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  if (range) {
+    // Parse the Range header to support partial requests
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunkSize = end - start + 1;
+
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunkSize,
+      'Content-Type': 'video/mp4',
+      'Content-Disposition': 'attachment; filename="clip.mp4"',
+    });
+
+    const stream = fs.createReadStream(filePath, { start, end });
+    stream.pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': 'video/mp4',
+      'Content-Disposition': 'attachment; filename="clip.mp4"',
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
 });
 
 app.get("/api/formats", async (req, res) => {
