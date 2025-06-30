@@ -19,7 +19,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
-const app = express();
+const app = express(); // HTTP server
 const port = process.env.PORT || 3001;
 
 const allowedOrigin = process.env.NODE_ENV === "production" 
